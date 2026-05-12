@@ -39,6 +39,15 @@
     background: var(--background-secondary);
 }
 
+.ballistics-table tbody tr.ballistics-bound td {
+    color: var(--text-error);
+    font-weight: 600;
+}
+
+.ballistics-bound-arrow {
+    font-weight: 700;
+}
+
 .ballistics-error {
     color: var(--text-error);
     background: var(--background-secondary);

@@ -64,16 +64,15 @@ Columns (always rendered, in this order):
 9. Energy — ft·lbf or J (requires bullet weight; see note below)
 10. Velocity — ft/s or m/s
 
-**Energy note:** Energy requires bullet mass. v1 will compute energy if a
-`bulletWeight` input is provided (grains imperial / grams metric). If
-omitted, the Energy column shows `—`. This keeps the minimal input set
-truly minimal while not losing the column.
+**Energy note:** Energy requires bullet mass, so `bulletWeight` is part
+of the required input set (grains imperial / grams metric). The js-ballistics
+library also requires a non-zero weight to construct its drag model.
 
-Final input set including this addition:
+Final required input set:
 
 ```
 bc, muzzleVelocity, sightHeight, zeroRange, maxRange, step,
-windSpeed, windAngle, bulletWeight (optional)
+windSpeed, windAngle, bulletWeight
 ```
 
 ### Errors
@@ -95,83 +94,78 @@ Existing `logLevel` is unchanged.
 
 ## Architecture
 
+The trajectory math is delegated to [`js-ballistics`](https://www.npmjs.com/package/js-ballistics)
+(o-murphy's port of py-ballisticscalc). v1 uses its RK4 engine, G1 drag
+table, and ICAO standard atmosphere. Owning the math ourselves was the
+plan's biggest risk surface; delegating removes a large class of subtle
+integration/scaling bugs and gives us a path to G7 / atmospherics / shot
+angle / Coriolis later by enabling features rather than implementing them.
+
 New single-responsibility modules under `src/`:
 
-- **`parser.ts`** — Parses codefence body into a typed `BallisticsInput`
-  object. Lenient YAML-style `key: value` parsing (no full YAML
-  dependency; we own the schema and it's all scalars). Returns either
-  parsed inputs or a structured `ParseError`. Validates required fields
-  and numeric ranges.
-- **`ballistics.ts`** — Pure physics. Exports:
-    - `g1Drag(mach: number): number` — standard G1 drag function table
-      interpolation.
-    - `solveTrajectory(inputs, opts): TrajectoryRow[]` — point-mass solver
-      that:
-        1. Iterates to find the launch angle producing the requested zero.
-        2. Integrates trajectory with RK4 at a fixed small `dt`.
-        3. Samples the trajectory at each `step` interval through `maxRange`.
-        4. Computes wind drift via crosswind component and lag time
-           (`drift = crosswind * (t - x/v0)` — standard point-mass approx).
-           No I/O, no DOM, no Obsidian imports. Fully unit-testable.
-- **`units.ts`** — Conversion helpers and label strings keyed by the
-  `units` setting. Internally the solver works in a single consistent
-  set (SI); `units.ts` converts inputs in and outputs out.
-- **`renderer.ts`** — Takes `TrajectoryRow[]` plus a `units` mode and
+- **`parser.ts`** — Parses codefence body into typed `ParsedInputs`.
+  Lenient `key: value` parsing (no YAML dependency; flat scalar schema).
+  Returns either parsed inputs or a structured `ParseError`. Validates
+  required fields and numeric ranges.
+- **`ballistics.ts`** — Thin adapter over `js-ballistics`. Maps
+  `ParsedInputs + UnitSystem` to the library's `Weapon` / `Ammo` /
+  `DragModel` / `Shot` / `Wind` / `Atmo` types using the correct `UNew.*`
+  constructors per unit system; runs the RK4 engine; extracts each
+  `TrajectoryData` into a flat `TrajectoryRow` in display units (range,
+  elevation, elevationMoa, elevationMil, windage, windageMoa, windageMil,
+  time, energy, velocity). No DOM, no Obsidian.
+- **`units.ts`** — `UnitSystem` type alias and column-label strings.
+  All numeric unit conversion is handled by the library.
+- **`renderer.ts`** — Takes `TrajectoryRow[]` plus a `UnitSystem` and
   builds the HTML table element. Uses CSS classes (`.ballistics-table`,
   `.ballistics-error`) — no inline styles, no hardcoded colors.
 - **`main.ts`** — Registers the markdown code block processor for
-  `ballistics`. Wires parser → solver → renderer; on any error, renders
+  `ballistics`. Wires parser → adapter → renderer; on any error, renders
   the error box instead.
 - **`styles.css`** — Table and error-box styling using Obsidian CSS
-  variables (`--background-primary`, `--background-modifier-border`,
-  `--text-normal`, `--text-error`).
+  variables.
 
 Module dependency graph (all one-way):
 
 ```
 main.ts
   ├── parser.ts
-  ├── ballistics.ts ── units.ts
+  ├── ballistics.ts ── (js-ballistics)
   ├── renderer.ts ── units.ts
-  └── settings.ts ── config.ts
+  └── settings.ts ── config.ts ── units.ts
 ```
 
-`ballistics.ts` has no dependencies on `obsidian` or DOM. `renderer.ts`
-depends on DOM only (no Obsidian APIs needed — code-block processors
-get a plain `HTMLElement` to populate).
+`ballistics.ts` has no dependencies on `obsidian` or the DOM.
+`renderer.ts` depends on DOM only.
 
 ## Physics specifics
 
-- **Drag model:** G1, using the standard Mach-vs-Cd table interpolated
-  linearly. Reference: Pejsa / McCoy / public G1 table (used by JBM,
-  Hornady, shooterscalculator).
-- **Speed of sound:** ICAO standard 1116.45 ft/s at 59°F.
-- **Air density:** ICAO standard sea level, 1.225 kg/m³.
-- **Integrator:** RK4 with `dt = 0.0005 s` (tunable constant in module).
-  Numerical accuracy goal: within ~0.1 MOA of shooterscalculator at
-  1000 yd for representative .308/6.5CM-class inputs.
-- **Zero-finding:** Bisection on launch angle to drive bullet height
-  through 0 at `zeroRange`. Bracketed by `[-5°, +5°]` which covers any
-  realistic rifle zero.
-- **Sight height effect:** Bullet launches `sightHeight` below the line
-  of sight; trajectory is reported relative to line of sight.
-- **Wind drift:** Crosswind component `windSpeed * sin(windAngle)`;
-  drift = `crosswind * (t - x / muzzleVelocity)`.
+- **Drag model:** G1 (built-in to js-ballistics).
+- **Atmosphere:** ICAO standard sea level (`Atmo.icao()`).
+- **Integrator:** js-ballistics' RK4 engine (`RK4IntegrationEngine`).
+- **Zero-finding:** `calc.setWeaponZero(shot, zeroDistance)` (library).
+- **Bullet diameter:** Hardcoded to 0.308 in inside the adapter. Diameter
+  affects sectional density / form factor in the library, but its effect
+  on trajectory is negligible once BC is given. Smoke-test verified
+  against the user-supplied shooterscalculator example to within ~2%.
+  A configurable `bulletDiameter` is a v2 addition.
+- **Wind drift:** Provided by the library's multi-wind model (we pass a
+  single `Wind` entry with `velocity` and `directionFrom`).
 
 ## Testing
 
-The math is the part most likely to be wrong silently. Adding `vitest`
-with a small suite is worth the ceremony:
+vitest with a small suite focused on the layers we own:
 
 - Parser: valid input → expected object; each error type → expected
   `ParseError`.
-- Solver: a handful of reference scenarios (e.g., the user-supplied
-  shooterscalculator example) checked to ±0.1 MOA tolerance.
-- Units: round-trip conversion equality.
+- Adapter: the user-supplied shooterscalculator example checked with
+  generous tolerances (±10 in or ±5% on drop at 1000 yd, ±5 in or ±10%
+  on wind, ±50 fps on velocity) to absorb atmospheric-model differences
+  between the two implementations.
+- Renderer: column order, headers, classes, basic formatting under
+  happy-dom.
 
-No DOM/Obsidian mocks needed — the solver and parser are pure.
-
-A new `npm test` script and a `just test` recipe will be added.
+A new `npm test` script and `just test` recipe will be added.
 
 ## Out of scope (v1, additive later)
 
@@ -189,5 +183,9 @@ A new `npm test` script and a `just test` recipe will be added.
 - Parsing is a thin custom `key: value` reader rather than a YAML lib.
   This avoids a dependency and keeps the schema explicit. If we later
   add nested structure, revisit.
-- Energy column shows `—` when `bulletWeight` is absent rather than
-  hiding the column. Keeps column count stable.
+- Bullet diameter is hardcoded to 0.308 in v1; promote to an optional
+  input in v2 if anyone hits a noticeable discrepancy on small-bore or
+  large-bore loads.
+- `load:` is reserved for a future linked-load-profile feature
+  (`load: [[loads/308-hornady]]`). The parser will reject it for now;
+  this prevents collisions with the future schema.

@@ -77,7 +77,7 @@ export function solveTrajectory(inputs: ParsedInputs, system: UnitSystem): Traje
     const shot = new Shot({
         weapon,
         ammo,
-        atmo: Atmo.icao(),
+        atmo: buildAtmo(inputs, system),
         winds,
     });
 
@@ -114,4 +114,35 @@ export function solveTrajectory(inputs: ParsedInputs, system: UnitSystem): Traje
         energy: td.energy.In(energyUnit),
         velocity: td.velocity.In(velocityUnit),
     }));
+}
+
+function buildAtmo(inputs: ParsedInputs, system: UnitSystem): Atmo {
+    const hasAny =
+        inputs.altitude !== undefined ||
+        inputs.pressure !== undefined ||
+        inputs.temperature !== undefined ||
+        inputs.humidity !== undefined;
+    if (!hasAny) return Atmo.icao();
+
+    const altitude =
+        inputs.altitude !== undefined
+            ? system === "imperial"
+                ? UNew.Foot(inputs.altitude)
+                : UNew.Meter(inputs.altitude)
+            : null;
+    const pressure =
+        inputs.pressure !== undefined
+            ? system === "imperial"
+                ? UNew.InHg(inputs.pressure)
+                : UNew.hPa(inputs.pressure)
+            : null;
+    const temperature =
+        inputs.temperature !== undefined
+            ? system === "imperial"
+                ? UNew.Fahrenheit(inputs.temperature)
+                : UNew.Celsius(inputs.temperature)
+            : null;
+    const humidity = inputs.humidity !== undefined ? inputs.humidity / 100 : 0;
+
+    return new Atmo({ altitude, pressure, temperature, humidity });
 }

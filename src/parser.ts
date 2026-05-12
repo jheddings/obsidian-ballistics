@@ -10,6 +10,10 @@ export interface ParsedInputs {
     windSpeed: number;
     windAngle: number;
     bulletWeight: number;
+    altitude?: number;
+    pressure?: number;
+    temperature?: number;
+    humidity?: number;
 }
 
 export interface ParseError {
@@ -28,7 +32,14 @@ const REQUIRED_KEYS = [
     "bulletWeight",
 ] as const;
 
-const OPTIONAL_KEYS = ["windSpeed", "windAngle"] as const;
+const OPTIONAL_KEYS = [
+    "windSpeed",
+    "windAngle",
+    "altitude",
+    "pressure",
+    "temperature",
+    "humidity",
+] as const;
 
 const DEFAULTS: Record<string, number> = {
     windSpeed: 0,
@@ -90,6 +101,10 @@ export function parseBallisticsBlock(source: string): ParseResult {
         windSpeed: fields.windSpeed ?? DEFAULTS.windSpeed,
         windAngle: fields.windAngle ?? DEFAULTS.windAngle,
         bulletWeight: fields.bulletWeight,
+        altitude: "altitude" in fields ? fields.altitude : undefined,
+        pressure: "pressure" in fields ? fields.pressure : undefined,
+        temperature: "temperature" in fields ? fields.temperature : undefined,
+        humidity: "humidity" in fields ? fields.humidity : undefined,
     };
 
     const v = validate(value);
@@ -114,6 +129,10 @@ function validate(i: ParsedInputs): string | null {
     if (i.windAngle < 0 || i.windAngle > 360)
         return `"windAngle" must be between 0 and 360 (got ${i.windAngle})`;
     if (i.bulletWeight <= 0) return `"bulletWeight" must be positive (got ${i.bulletWeight})`;
+    if (i.pressure !== undefined && i.pressure <= 0)
+        return `"pressure" must be positive (got ${i.pressure})`;
+    if (i.humidity !== undefined && (i.humidity < 0 || i.humidity > 100))
+        return `"humidity" must be between 0 and 100 (got ${i.humidity})`;
     return null;
 }
 

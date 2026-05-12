@@ -25,10 +25,15 @@ const REQUIRED_KEYS = [
     "zeroRange",
     "maxRange",
     "rangeStep",
-    "windSpeed",
-    "windAngle",
     "bulletWeight",
 ] as const;
+
+const OPTIONAL_KEYS = ["windSpeed", "windAngle"] as const;
+
+const DEFAULTS: Record<string, number> = {
+    windSpeed: 0,
+    windAngle: 0,
+};
 
 const KEY_ALIASES: Record<string, string> = {
     coeff: "bc",
@@ -36,7 +41,11 @@ const KEY_ALIASES: Record<string, string> = {
     muzzleVelocity: "initialVelocity",
 };
 
-const ALL_KEYS: ReadonlySet<string> = new Set([...REQUIRED_KEYS, ...Object.keys(KEY_ALIASES)]);
+const ALL_KEYS: ReadonlySet<string> = new Set([
+    ...REQUIRED_KEYS,
+    ...OPTIONAL_KEYS,
+    ...Object.keys(KEY_ALIASES),
+]);
 
 export function parseBallisticsBlock(source: string): ParseResult {
     const fields: Record<string, number> = {};
@@ -78,8 +87,8 @@ export function parseBallisticsBlock(source: string): ParseResult {
         zeroRange: fields.zeroRange,
         maxRange: fields.maxRange,
         rangeStep: fields.rangeStep,
-        windSpeed: fields.windSpeed,
-        windAngle: fields.windAngle,
+        windSpeed: fields.windSpeed ?? DEFAULTS.windSpeed,
+        windAngle: fields.windAngle ?? DEFAULTS.windAngle,
         bulletWeight: fields.bulletWeight,
     };
 

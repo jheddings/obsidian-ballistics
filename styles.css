@@ -1,1 +1,50 @@
-/* obsidian-ballistics plugin styles */
+.ballistics-table {
+    border-collapse: collapse;
+    margin: 0.5em 0;
+    font-size: var(--font-text-size, 14px);
+    color: var(--text-normal);
+}
+
+.ballistics-table thead th {
+    font-weight: 600;
+    text-align: center;
+    padding: 0.25em 0.6em;
+    border-bottom: 1px solid var(--background-modifier-border);
+    background: inherit;
+}
+
+.ballistics-table thead tr:first-child {
+    background: var(--background-primary);
+}
+
+.ballistics-table thead tr:nth-child(2) {
+    background: var(--background-secondary);
+}
+
+.ballistics-table thead tr:nth-child(2) th {
+    font-size: 0.85em;
+    font-weight: 500;
+}
+
+.ballistics-table tbody td {
+    text-align: right;
+    padding: 0.2em 0.6em;
+    border-bottom: 1px solid var(--background-modifier-border);
+    font-family: var(--font-monospace);
+    font-size: 0.85em;
+    font-variant-numeric: tabular-nums;
+}
+
+.ballistics-table tbody tr:nth-child(even) td {
+    background: var(--background-secondary);
+}
+
+.ballistics-error {
+    color: var(--text-error);
+    background: var(--background-secondary);
+    border: 1px solid var(--text-error);
+    border-radius: 4px;
+    padding: 0.5em 0.75em;
+    font-family: var(--font-monospace);
+    white-space: pre-wrap;
+}

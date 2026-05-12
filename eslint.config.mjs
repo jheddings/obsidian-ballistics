@@ -31,6 +31,13 @@ export default defineConfig([
         },
     },
     {
+        files: ["tests/**/*.ts"],
+        rules: {
+            "obsidianmd/prefer-create-el": "off",
+            "obsidianmd/prefer-active-doc": "off",
+        },
+    },
+    {
         files: ["package.json"],
         rules: {
             ...obsidianmdOff,

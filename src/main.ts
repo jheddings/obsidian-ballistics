@@ -4,9 +4,13 @@ import { Plugin } from "obsidian";
 import { Logger, LogLevel } from "obskit";
 import { BallisticsPluginSettings } from "./config";
 import { BallisticsSettingsTab } from "./settings";
+import { parseBallisticsBlock } from "./parser";
+import { solveTrajectory } from "./ballistics";
+import { renderTrajectoryTable, renderError } from "./renderer";
 
 const DEFAULT_SETTINGS: BallisticsPluginSettings = {
     logLevel: LogLevel.ERROR,
+    units: "imperial",
 };
 
 export default class BallisticsPlugin extends Plugin {
@@ -18,6 +22,10 @@ export default class BallisticsPlugin extends Plugin {
         await this.loadSettings();
 
         this.addSettingTab(new BallisticsSettingsTab(this.app, this));
+
+        this.registerMarkdownCodeBlockProcessor("ballistics-table", (source, el) => {
+            this.processBlock(source, el);
+        });
 
         this.logger.info("Plugin loaded");
     }
@@ -41,5 +49,21 @@ export default class BallisticsPlugin extends Plugin {
 
     private applySettings() {
         Logger.setGlobalLogLevel(this.settings.logLevel);
+    }
+
+    private processBlock(source: string, el: HTMLElement): void {
+        const parsed = parseBallisticsBlock(source);
+        if (!parsed.ok) {
+            renderError(el, parsed.error.message);
+            return;
+        }
+        try {
+            const rows = solveTrajectory(parsed.value, this.settings.units);
+            renderTrajectoryTable(el, rows, this.settings.units);
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.logger.error("Trajectory solver failed", e);
+            renderError(el, `solver failure: ${msg}`);
+        }
     }
 }

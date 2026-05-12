@@ -1,0 +1,145 @@
+import { describe, it, expect } from "vitest";
+import { parseBallisticsBlock, type ParsedInputs } from "../src/parser";
+
+describe("parseBallisticsBlock", () => {
+    const valid = `
+bc: 0.475
+initialVelocity: 2700
+sightHeight: 1.5
+zeroRange: 100
+maxRange: 1000
+rangeStep: 50
+windSpeed: 10
+windAngle: 90
+bulletWeight: 168
+`;
+
+    it("parses a valid block", () => {
+        const result = parseBallisticsBlock(valid);
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        const i: ParsedInputs = result.value;
+        expect(i.bc).toBe(0.475);
+        expect(i.initialVelocity).toBe(2700);
+        expect(i.sightHeight).toBe(1.5);
+        expect(i.zeroRange).toBe(100);
+        expect(i.maxRange).toBe(1000);
+        expect(i.rangeStep).toBe(50);
+        expect(i.windSpeed).toBe(10);
+        expect(i.windAngle).toBe(90);
+        expect(i.bulletWeight).toBe(168);
+    });
+
+    it("accepts `coeff` as an alias for `bc`", () => {
+        const block = valid.replace("bc: 0.475", "coeff: 0.475");
+        const result = parseBallisticsBlock(block);
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.value.bc).toBe(0.475);
+    });
+
+    it("accepts `coefficient` as an alias for `bc`", () => {
+        const block = valid.replace("bc: 0.475", "coefficient: 0.475");
+        const result = parseBallisticsBlock(block);
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.value.bc).toBe(0.475);
+    });
+
+    it("accepts `muzzleVelocity` as an alias for `initialVelocity`", () => {
+        const block = valid.replace("initialVelocity: 2700", "muzzleVelocity: 2700");
+        const result = parseBallisticsBlock(block);
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.value.initialVelocity).toBe(2700);
+    });
+
+    it("errors when bulletWeight is missing", () => {
+        const block = valid.replace(/bulletWeight:.*\n/, "");
+        const result = parseBallisticsBlock(block);
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.error.message).toMatch(/bulletWeight/);
+    });
+
+    it("ignores blank lines and # comments", () => {
+        const block = `
+# my favorite load
+bc: 0.475
+
+initialVelocity: 2700
+sightHeight: 1.5
+zeroRange: 100
+maxRange: 1000
+rangeStep: 50
+windSpeed: 10
+windAngle: 90
+bulletWeight: 168
+`;
+        const result = parseBallisticsBlock(block);
+        expect(result.ok).toBe(true);
+    });
+
+    it("errors on a missing required field", () => {
+        const block = valid.replace(/initialVelocity:.*\n/, "");
+        const result = parseBallisticsBlock(block);
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.error.message).toMatch(/initialVelocity/);
+    });
+
+    it("errors on a non-numeric value", () => {
+        const block = valid.replace("bc: 0.475", "bc: fast");
+        const result = parseBallisticsBlock(block);
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.error.message).toMatch(/bc/);
+        expect(result.error.message).toMatch(/fast/);
+    });
+
+    it("errors on an unknown key", () => {
+        const block = valid + "drag: G7\n";
+        const result = parseBallisticsBlock(block);
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.error.message).toMatch(/drag/);
+    });
+
+    it("errors when bc is not positive", () => {
+        const block = valid.replace("bc: 0.475", "bc: 0");
+        const result = parseBallisticsBlock(block);
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.error.message).toMatch(/bc/);
+    });
+
+    it("errors when rangeStep exceeds maxRange", () => {
+        const block = valid.replace("rangeStep: 50", "rangeStep: 1500");
+        const result = parseBallisticsBlock(block);
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.error.message).toMatch(/rangeStep/);
+    });
+
+    it("errors when maxRange is less than zeroRange", () => {
+        const block = valid.replace("maxRange: 1000", "maxRange: 50");
+        const result = parseBallisticsBlock(block);
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.error.message).toMatch(/maxRange/);
+    });
+
+    it("errors when windAngle is out of range", () => {
+        const block = valid.replace("windAngle: 90", "windAngle: 500");
+        const result = parseBallisticsBlock(block);
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.error.message).toMatch(/windAngle/);
+    });
+
+    it("errors on a malformed line", () => {
+        const block = valid + "this is not a key value line\n";
+        const result = parseBallisticsBlock(block);
+        expect(result.ok).toBe(false);
+    });
+});

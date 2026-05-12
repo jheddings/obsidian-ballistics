@@ -17,8 +17,12 @@ check:
 	npx prettier --check .
 	npx eslint .
 
-# full preflight: build + check
-preflight: build check
+# run unit tests
+test: setup
+	npm test
+
+# full preflight: build + check + test
+preflight: build check test
 
 # build the plugin
 build: setup

@@ -1,0 +1,45 @@
+name: Release
+run-name: Release ${{ github.ref_name }}
+
+on:
+    push:
+        tags:
+            - "[0-9]+.[0-9]+.[0-9]+"
+
+jobs:
+    release:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v6.0.2
+              with:
+                  fetch-depth: 0
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v6.4.0
+              with:
+                  node-version: "24.15.0"
+                  cache: "npm"
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Build plugin
+              run: npm run build
+
+            - name: Get version from tag
+              id: version
+              run: echo "VERSION=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+
+            - name: Generate release notes
+              run: npx git-cliff@latest --latest --strip header -o RELEASE_NOTES.md
+
+            - name: Create release
+              run: |
+                  gh release create ${{ github.ref_name }} \
+                    --title "obsidian-ballistics-${{ github.ref_name }}" \
+                    --notes-file RELEASE_NOTES.md --draft \
+                    ./main.js ./manifest.json ./styles.css
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

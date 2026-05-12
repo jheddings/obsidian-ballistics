@@ -1,0 +1,10 @@
+{
+    "id": "ballistics",
+    "name": "Ballistics",
+    "version": "0.1.0",
+    "minAppVersion": "1.0.0",
+    "description": "Embed ballistics data in Obsidian notes.",
+    "author": "Jason Heddings",
+    "authorUrl": "https://github.com/jheddings",
+    "isDesktopOnly": false
+}

@@ -35,8 +35,21 @@
     font-variant-numeric: tabular-nums;
 }
 
+.ballistics-table tbody td:first-child {
+    text-align: left;
+}
+
 .ballistics-table tbody tr:nth-child(even) td {
     background: var(--background-secondary);
+}
+
+.ballistics-table tbody tr.ballistics-bound td {
+    color: var(--text-error);
+    font-weight: 600;
+}
+
+.ballistics-bound-arrow {
+    font-weight: 700;
 }
 
 .ballistics-error {

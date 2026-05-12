@@ -5,7 +5,11 @@ import { labels, type UnitSystem } from "./units";
 
 export interface RenderOptions {
     includeWindage: boolean;
+    minEnergy?: number;
+    maxEnergy?: number;
 }
+
+type RowMark = "max" | "min" | undefined;
 
 export function renderTrajectoryTable(
     container: HTMLElement,
@@ -33,9 +37,11 @@ export function renderTrajectoryTable(
     appendHeaderRow(thead, headerBottom);
     table.appendChild(thead);
 
+    const marks = computeBoundMarks(rows, options.minEnergy, options.maxEnergy);
+
     const tbody = doc.createElement("tbody");
-    for (const row of rows) {
-        tbody.appendChild(formatRow(doc, row, options));
+    for (let i = 0; i < rows.length; i++) {
+        tbody.appendChild(formatRow(doc, rows[i], options, marks[i]));
     }
     table.appendChild(tbody);
 
@@ -49,6 +55,27 @@ export function renderError(container: HTMLElement, message: string): void {
     container.appendChild(el);
 }
 
+function computeBoundMarks(
+    rows: TrajectoryRow[],
+    minEnergy: number | undefined,
+    maxEnergy: number | undefined
+): RowMark[] {
+    const marks: RowMark[] = rows.map(() => undefined);
+
+    if (maxEnergy !== undefined) {
+        const idx = rows.findIndex((r) => r.energy <= maxEnergy);
+        if (idx !== -1) marks[idx] = "max";
+    }
+    if (minEnergy !== undefined) {
+        let idx = -1;
+        for (let i = 0; i < rows.length; i++) {
+            if (rows[i].energy >= minEnergy) idx = i;
+        }
+        if (idx !== -1 && marks[idx] === undefined) marks[idx] = "min";
+    }
+    return marks;
+}
+
 function appendHeaderRow(thead: HTMLTableSectionElement, cells: string[]): void {
     const tr = thead.ownerDocument.createElement("tr");
     for (const text of cells) {
@@ -60,10 +87,26 @@ function appendHeaderRow(thead: HTMLTableSectionElement, cells: string[]): void 
     thead.appendChild(tr);
 }
 
-function formatRow(doc: Document, row: TrajectoryRow, options: RenderOptions): HTMLTableRowElement {
+function formatRow(
+    doc: Document,
+    row: TrajectoryRow,
+    options: RenderOptions,
+    mark: RowMark
+): HTMLTableRowElement {
     const tr = doc.createElement("tr");
+    if (mark) tr.classList.add("ballistics-bound", `ballistics-bound-${mark}`);
+
+    const rangeCell = doc.createElement("td");
+    rangeCell.textContent = row.range.toFixed(0);
+    if (mark) {
+        const arrow = doc.createElement("span");
+        arrow.classList.add("ballistics-bound-arrow");
+        arrow.textContent = mark === "max" ? " ↓" : " ↑";
+        rangeCell.appendChild(arrow);
+    }
+    tr.appendChild(rangeCell);
+
     const cells = [
-        row.range.toFixed(0),
         row.elevation.toFixed(2),
         row.elevationMoa.toFixed(2),
         row.elevationMil.toFixed(2),

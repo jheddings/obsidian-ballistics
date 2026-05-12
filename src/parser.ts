@@ -14,6 +14,8 @@ export interface ParsedInputs {
     pressure?: number;
     temperature?: number;
     humidity?: number;
+    minEnergy?: number;
+    maxEnergy?: number;
 }
 
 export interface ParseError {
@@ -39,6 +41,8 @@ const OPTIONAL_KEYS = [
     "pressure",
     "temperature",
     "humidity",
+    "minEnergy",
+    "maxEnergy",
 ] as const;
 
 const DEFAULTS: Record<string, number> = {
@@ -105,6 +109,8 @@ export function parseBallisticsBlock(source: string): ParseResult {
         pressure: "pressure" in fields ? fields.pressure : undefined,
         temperature: "temperature" in fields ? fields.temperature : undefined,
         humidity: "humidity" in fields ? fields.humidity : undefined,
+        minEnergy: "minEnergy" in fields ? fields.minEnergy : undefined,
+        maxEnergy: "maxEnergy" in fields ? fields.maxEnergy : undefined,
     };
 
     const v = validate(value);
@@ -133,6 +139,12 @@ function validate(i: ParsedInputs): string | null {
         return `"pressure" must be positive (got ${i.pressure})`;
     if (i.humidity !== undefined && (i.humidity < 0 || i.humidity > 100))
         return `"humidity" must be between 0 and 100 (got ${i.humidity})`;
+    if (i.minEnergy !== undefined && i.minEnergy < 0)
+        return `"minEnergy" must be non-negative (got ${i.minEnergy})`;
+    if (i.maxEnergy !== undefined && i.maxEnergy < 0)
+        return `"maxEnergy" must be non-negative (got ${i.maxEnergy})`;
+    if (i.minEnergy !== undefined && i.maxEnergy !== undefined && i.maxEnergy <= i.minEnergy)
+        return `"maxEnergy" (${i.maxEnergy}) must be greater than "minEnergy" (${i.minEnergy})`;
     return null;
 }
 

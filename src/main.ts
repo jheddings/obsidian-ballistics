@@ -61,8 +61,8 @@ export default class BallisticsPlugin extends Plugin {
             const rows = solveTrajectory(parsed.value, this.settings.units);
             renderTrajectoryTable(el, rows, this.settings.units, {
                 includeWindage: parsed.value.windSpeed > 0,
-                lowerBound: parsed.value.lowerBound,
-                upperBound: parsed.value.upperBound,
+                minEnergy: parsed.value.minEnergy,
+                maxEnergy: parsed.value.maxEnergy,
             });
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);

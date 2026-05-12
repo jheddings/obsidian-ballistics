@@ -5,11 +5,11 @@ import { labels, type UnitSystem } from "./units";
 
 export interface RenderOptions {
     includeWindage: boolean;
-    lowerBound?: number;
-    upperBound?: number;
+    minEnergy?: number;
+    maxEnergy?: number;
 }
 
-type RowMark = "upper" | "lower" | undefined;
+type RowMark = "max" | "min" | undefined;
 
 export function renderTrajectoryTable(
     container: HTMLElement,
@@ -37,7 +37,7 @@ export function renderTrajectoryTable(
     appendHeaderRow(thead, headerBottom);
     table.appendChild(thead);
 
-    const marks = computeBoundMarks(rows, options.lowerBound, options.upperBound);
+    const marks = computeBoundMarks(rows, options.minEnergy, options.maxEnergy);
 
     const tbody = doc.createElement("tbody");
     for (let i = 0; i < rows.length; i++) {
@@ -57,21 +57,21 @@ export function renderError(container: HTMLElement, message: string): void {
 
 function computeBoundMarks(
     rows: TrajectoryRow[],
-    lowerBound: number | undefined,
-    upperBound: number | undefined
+    minEnergy: number | undefined,
+    maxEnergy: number | undefined
 ): RowMark[] {
     const marks: RowMark[] = rows.map(() => undefined);
 
-    if (upperBound !== undefined) {
-        const idx = rows.findIndex((r) => r.energy <= upperBound);
-        if (idx !== -1) marks[idx] = "upper";
+    if (maxEnergy !== undefined) {
+        const idx = rows.findIndex((r) => r.energy <= maxEnergy);
+        if (idx !== -1) marks[idx] = "max";
     }
-    if (lowerBound !== undefined) {
+    if (minEnergy !== undefined) {
         let idx = -1;
         for (let i = 0; i < rows.length; i++) {
-            if (rows[i].energy >= lowerBound) idx = i;
+            if (rows[i].energy >= minEnergy) idx = i;
         }
-        if (idx !== -1 && marks[idx] === undefined) marks[idx] = "lower";
+        if (idx !== -1 && marks[idx] === undefined) marks[idx] = "min";
     }
     return marks;
 }
@@ -101,7 +101,7 @@ function formatRow(
     if (mark) {
         const arrow = doc.createElement("span");
         arrow.classList.add("ballistics-bound-arrow");
-        arrow.textContent = mark === "upper" ? " ↓" : " ↑";
+        arrow.textContent = mark === "max" ? " ↓" : " ↑";
         rangeCell.appendChild(arrow);
     }
     tr.appendChild(rangeCell);

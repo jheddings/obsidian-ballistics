@@ -59,7 +59,9 @@ export default class BallisticsPlugin extends Plugin {
         }
         try {
             const rows = solveTrajectory(parsed.value, this.settings.units);
-            renderTrajectoryTable(el, rows, this.settings.units);
+            renderTrajectoryTable(el, rows, this.settings.units, {
+                includeWindage: parsed.value.windSpeed > 0,
+            });
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             this.logger.error("Trajectory solver failed", e);

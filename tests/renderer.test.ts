@@ -25,7 +25,7 @@ describe("renderTrajectoryTable", () => {
     });
 
     it("renders imperial column headers", () => {
-        renderTrajectoryTable(container, [makeRow()], "imperial");
+        renderTrajectoryTable(container, [makeRow()], "imperial", { includeWindage: true });
         const headerText = Array.from(container.querySelectorAll("thead th")).map(
             (c) => c.textContent ?? ""
         );
@@ -38,7 +38,7 @@ describe("renderTrajectoryTable", () => {
     });
 
     it("renders metric column headers", () => {
-        renderTrajectoryTable(container, [makeRow()], "metric");
+        renderTrajectoryTable(container, [makeRow()], "metric", { includeWindage: true });
         const headerText = Array.from(container.querySelectorAll("thead th")).map(
             (c) => c.textContent ?? ""
         );
@@ -48,7 +48,9 @@ describe("renderTrajectoryTable", () => {
     });
 
     it("renders one tbody row per trajectory row", () => {
-        renderTrajectoryTable(container, [makeRow(), makeRow({ range: 100 })], "imperial");
+        renderTrajectoryTable(container, [makeRow(), makeRow({ range: 100 })], "imperial", {
+            includeWindage: true,
+        });
         expect(container.querySelectorAll("tbody tr").length).toBe(2);
     });
 
@@ -69,7 +71,8 @@ describe("renderTrajectoryTable", () => {
                     velocity: 2513,
                 }),
             ],
-            "imperial"
+            "imperial",
+            { includeWindage: true }
         );
         const cells = Array.from(container.querySelectorAll("tbody tr td")).map(
             (c) => c.textContent ?? ""
@@ -88,7 +91,7 @@ describe("renderTrajectoryTable", () => {
     });
 
     it("includes the .ballistics-table class on the rendered table", () => {
-        renderTrajectoryTable(container, [makeRow()], "imperial");
+        renderTrajectoryTable(container, [makeRow()], "imperial", { includeWindage: true });
         expect(container.querySelector("table")?.classList.contains("ballistics-table")).toBe(true);
     });
 });

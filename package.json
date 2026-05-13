@@ -21,7 +21,6 @@
         "@types/node": "^24.12.4",
         "@typescript-eslint/eslint-plugin": "8.59.3",
         "@typescript-eslint/parser": "8.59.3",
-        "builtin-modules": "5.1.0",
         "esbuild": "0.28.0",
         "eslint": "^10.3.0",
         "eslint-config-prettier": "^10.1.8",
@@ -30,14 +29,14 @@
         "globals": "^16.4.0",
         "happy-dom": "^15.11.7",
         "husky": "^9.1.7",
-        "lint-staged": "^17.0.4",
+        "nano-staged": "^0.8.0",
         "obsidian": "latest",
         "prettier": "^3.8.3",
         "tslib": "2.8.1",
         "typescript": "6.0.3",
         "vitest": "^2.1.9"
     },
-    "lint-staged": {
+    "nano-staged": {
         "*.{js,jsx,ts,tsx,json,css,scss,md}": [
             "prettier --check",
             "eslint"

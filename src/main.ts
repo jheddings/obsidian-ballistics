@@ -1,10 +1,10 @@
 // main.ts - main entry point for obsidian-ballistics plugin
 
-import { Plugin } from "obsidian";
+import { Plugin, TFile, type MarkdownPostProcessorContext } from "obsidian";
 import { Logger, LogLevel } from "obskit";
 import { BallisticsPluginSettings } from "./config";
 import { BallisticsSettingsTab } from "./settings";
-import { parseBallisticsBlock } from "./parser";
+import { parseBallisticsBlock, type ParseContext } from "./parser";
 import { solveTrajectory } from "./ballistics";
 import { renderTrajectoryTable, renderError } from "./renderer";
 
@@ -23,8 +23,8 @@ export default class BallisticsPlugin extends Plugin {
 
         this.addSettingTab(new BallisticsSettingsTab(this.app, this));
 
-        this.registerMarkdownCodeBlockProcessor("ballistics-table", (source, el) => {
-            this.processBlock(source, el);
+        this.registerMarkdownCodeBlockProcessor("ballistics-table", (source, el, ctx) => {
+            this.processBlock(source, el, ctx);
         });
 
         this.logger.info("Plugin loaded");
@@ -51,8 +51,8 @@ export default class BallisticsPlugin extends Plugin {
         Logger.setGlobalLogLevel(this.settings.logLevel);
     }
 
-    private processBlock(source: string, el: HTMLElement): void {
-        const parsed = parseBallisticsBlock(source);
+    private processBlock(source: string, el: HTMLElement, ctx: MarkdownPostProcessorContext): void {
+        const parsed = parseBallisticsBlock(source, this.buildParseContext(ctx.sourcePath));
         if (!parsed.ok) {
             renderError(el, parsed.error.message);
             return;
@@ -70,6 +70,19 @@ export default class BallisticsPlugin extends Plugin {
             this.logger.error("Trajectory solver failed", e);
             renderError(el, `solver failure: ${msg}`);
         }
+    }
+
+    private buildParseContext(sourcePath: string): ParseContext {
+        return {
+            frontmatter: this.readFrontmatter(sourcePath),
+        };
+    }
+
+    private readFrontmatter(path: string): Record<string, unknown> | null {
+        const file = this.app.vault.getAbstractFileByPath(path);
+        if (!(file instanceof TFile)) return null;
+        const cache = this.app.metadataCache.getFileCache(file);
+        return cache?.frontmatter ?? null;
     }
 
     private alignCopyToEditButton(el: HTMLElement): void {

@@ -142,4 +142,75 @@ bulletWeight: 168
         const result = parseBallisticsBlock(block);
         expect(result.ok).toBe(false);
     });
+
+    describe("frontmatter inputs", () => {
+        const fullFrontmatter = {
+            "ballistics-bc": 0.475,
+            "ballistics-initial-velocity": 2700,
+            "ballistics-sight-height": 1.5,
+            "ballistics-zero-range": 100,
+            "ballistics-max-range": 1000,
+            "ballistics-range-step": 50,
+            "ballistics-bullet-weight": 168,
+        };
+
+        it("parses an empty body using only frontmatter", () => {
+            const result = parseBallisticsBlock("", { frontmatter: fullFrontmatter });
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+            expect(result.value.bc).toBe(0.475);
+            expect(result.value.initialVelocity).toBe(2700);
+            expect(result.value.bulletWeight).toBe(168);
+        });
+
+        it("lets inline body override frontmatter", () => {
+            const result = parseBallisticsBlock("rangeStep: 25\n", {
+                frontmatter: fullFrontmatter,
+            });
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+            expect(result.value.rangeStep).toBe(25);
+            expect(result.value.maxRange).toBe(1000);
+        });
+
+        it("accepts numeric strings in frontmatter", () => {
+            const fm = { ...fullFrontmatter, "ballistics-bc": "0.5" };
+            const result = parseBallisticsBlock("", { frontmatter: fm });
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+            expect(result.value.bc).toBe(0.5);
+        });
+
+        it("errors on a non-numeric frontmatter value", () => {
+            const fm = { ...fullFrontmatter, "ballistics-bc": "fast" };
+            const result = parseBallisticsBlock("", { frontmatter: fm });
+            expect(result.ok).toBe(false);
+            if (result.ok) return;
+            expect(result.error.message).toMatch(/ballistics-bc/);
+        });
+
+        it("errors on an unknown ballistics- frontmatter key", () => {
+            const fm = { ...fullFrontmatter, "ballistics-drag-model": "G7" };
+            const result = parseBallisticsBlock("", { frontmatter: fm });
+            expect(result.ok).toBe(false);
+            if (result.ok) return;
+            expect(result.error.message).toMatch(/ballistics-drag-model/);
+        });
+
+        it("ignores non-ballistics frontmatter keys", () => {
+            const fm = { ...fullFrontmatter, tags: ["rifle"], aliases: ["test"] };
+            const result = parseBallisticsBlock("", { frontmatter: fm });
+            expect(result.ok).toBe(true);
+        });
+
+        it("reports the missing key with a frontmatter hint", () => {
+            const fm = { ...fullFrontmatter };
+            delete (fm as Record<string, unknown>)["ballistics-bullet-weight"];
+            const result = parseBallisticsBlock("", { frontmatter: fm });
+            expect(result.ok).toBe(false);
+            if (result.ok) return;
+            expect(result.error.message).toMatch(/bulletWeight/);
+            expect(result.error.message).toMatch(/ballistics-bullet-weight/);
+        });
+    });
 });

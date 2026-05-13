@@ -129,7 +129,7 @@ function computeBoundMarks(
     minEnergy: number | undefined,
     maxEnergy: number | undefined
 ): RowMark[] {
-    const marks: RowMark[] = rows.map(() => undefined);
+    const marks: RowMark[] = rows.map((): RowMark => undefined);
 
     if (maxEnergy !== undefined) {
         const idx = rows.findIndex((r) => r.energy <= maxEnergy);

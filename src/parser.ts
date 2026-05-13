@@ -269,7 +269,11 @@ function extractFrontmatterFields(
 
         const num = typeof rawValue === "number" ? rawValue : Number(rawValue);
         if (!Number.isFinite(num)) {
-            return err(`frontmatter "${rawKey}" must be a number (got "${String(rawValue)}")`);
+            const display =
+                typeof rawValue === "string" || typeof rawValue === "number"
+                    ? String(rawValue)
+                    : JSON.stringify(rawValue);
+            return err(`frontmatter "${rawKey}" must be a number (got "${display}")`);
         }
         fields[key] = num;
     }

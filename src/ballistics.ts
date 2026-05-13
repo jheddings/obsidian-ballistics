@@ -45,6 +45,8 @@ export interface RangeWindow {
     maxRange: number;
     /** Step between rows, in display units (yd or m). */
     rangeStep: number;
+    /** Optional minimum range; rows below this are dropped. */
+    minRange?: number;
 }
 
 export function solveTrajectory(
@@ -113,7 +115,7 @@ export function solveTrajectory(
     const velocityUnit = system === "imperial" ? Unit.FPS : Unit.MPS;
     const energyUnit = system === "imperial" ? Unit.FootPound : Unit.Joule;
 
-    return result.trajectory.map((td) => ({
+    const rows: TrajectoryRow[] = result.trajectory.map((td) => ({
         range: td.distance.In(distanceUnit),
         elevation: td.targetDrop.In(linearUnit),
         elevationMoa: td.dropAdjustment.In(Unit.MOA),
@@ -125,6 +127,12 @@ export function solveTrajectory(
         energy: td.energy.In(energyUnit),
         velocity: td.velocity.In(velocityUnit),
     }));
+
+    if (window.minRange !== undefined && window.minRange > 0) {
+        const min = window.minRange;
+        return rows.filter((r) => r.range >= min - 0.5);
+    }
+    return rows;
 }
 
 function buildAtmo(inputs: BallisticsInputs, system: UnitSystem): Atmo {

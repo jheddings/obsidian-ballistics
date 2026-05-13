@@ -10,9 +10,10 @@ import { renderTrajectoryTable, renderError } from "./renderer";
 
 const TABLE_VIEW: ViewSpec = {
     required: [],
-    optional: ["maxRange", "rangeStep", "minEnergy", "maxEnergy"],
+    optional: ["minRange", "maxRange", "rangeStep", "minEnergy", "maxEnergy"],
     defaults: { maxRange: 1000, rangeStep: 100 },
     validators: {
+        minRange: (n) => (n < 0 ? `"minRange" must be non-negative (got ${n})` : null),
         maxRange: (n) => (n <= 0 ? `"maxRange" must be positive (got ${n})` : null),
         rangeStep: (n) => (n <= 0 ? `"rangeStep" must be positive (got ${n})` : null),
         minEnergy: (n) => (n < 0 ? `"minEnergy" must be non-negative (got ${n})` : null),
@@ -21,6 +22,9 @@ const TABLE_VIEW: ViewSpec = {
     crossValidate: (view) => {
         if (view.rangeStep > view.maxRange) {
             return `"rangeStep" (${view.rangeStep}) must not exceed "maxRange" (${view.maxRange})`;
+        }
+        if (view.minRange !== undefined && view.minRange >= view.maxRange) {
+            return `"minRange" (${view.minRange}) must be less than "maxRange" (${view.maxRange})`;
         }
         if (
             view.minEnergy !== undefined &&
@@ -87,6 +91,7 @@ export default class BallisticsPlugin extends Plugin {
             const rows = solveTrajectory(inputs, this.settings.units, {
                 maxRange: view.maxRange,
                 rangeStep: view.rangeStep,
+                minRange: view.minRange,
             });
             renderTrajectoryTable(el, rows, this.settings.units, {
                 includeWindage: inputs.windSpeed > 0,

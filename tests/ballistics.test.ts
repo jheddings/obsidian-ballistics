@@ -87,6 +87,31 @@ describe("solveTrajectory — imperial reference scenario", () => {
     });
 });
 
+describe("solveTrajectory — minRange filter", () => {
+    it("drops rows below minRange", () => {
+        const rows = solveTrajectory(referenceInputs, "imperial", {
+            maxRange: 1000,
+            rangeStep: 100,
+            minRange: 300,
+        });
+        expect(rows[0].range).toBeGreaterThanOrEqual(299);
+        expect(rows[rows.length - 1].range).toBeCloseTo(1000, 0);
+    });
+
+    it("is a no-op when minRange is 0 or undefined", () => {
+        const withZero = solveTrajectory(referenceInputs, "imperial", {
+            maxRange: 1000,
+            rangeStep: 100,
+            minRange: 0,
+        });
+        const without = solveTrajectory(referenceInputs, "imperial", {
+            maxRange: 1000,
+            rangeStep: 100,
+        });
+        expect(withZero.length).toBe(without.length);
+    });
+});
+
 describe("solveTrajectory — metric inputs", () => {
     it("accepts metric inputs and returns metric outputs", () => {
         const metric: BallisticsInputs = {

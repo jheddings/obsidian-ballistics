@@ -3,15 +3,19 @@ import { parseBallisticsBlock, type BallisticsInputs, type ViewSpec } from "../s
 
 const TABLE_VIEW: ViewSpec = {
     required: [],
-    optional: ["maxRange", "rangeStep", "minEnergy", "maxEnergy"],
+    optional: ["minRange", "maxRange", "rangeStep", "minEnergy", "maxEnergy"],
     defaults: { maxRange: 1000, rangeStep: 100 },
     validators: {
+        minRange: (n) => (n < 0 ? `"minRange" must be non-negative (got ${n})` : null),
         maxRange: (n) => (n <= 0 ? `"maxRange" must be positive (got ${n})` : null),
         rangeStep: (n) => (n <= 0 ? `"rangeStep" must be positive (got ${n})` : null),
     },
     crossValidate: (view) => {
         if (view.rangeStep > view.maxRange) {
             return `"rangeStep" (${view.rangeStep}) must not exceed "maxRange" (${view.maxRange})`;
+        }
+        if (view.minRange !== undefined && view.minRange >= view.maxRange) {
+            return `"minRange" (${view.minRange}) must be less than "maxRange" (${view.maxRange})`;
         }
         return null;
     },
@@ -149,6 +153,30 @@ bulletWeight: 168
         const block = valid + "this is not a key value line\n";
         const result = parseBallisticsBlock(block, { view: TABLE_VIEW });
         expect(result.ok).toBe(false);
+    });
+
+    it("accepts minRange as a view option", () => {
+        const block = valid + "minRange: 200\n";
+        const result = parseBallisticsBlock(block, { view: TABLE_VIEW });
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.value.view.minRange).toBe(200);
+    });
+
+    it("errors when minRange is negative", () => {
+        const block = valid + "minRange: -10\n";
+        const result = parseBallisticsBlock(block, { view: TABLE_VIEW });
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.error.message).toMatch(/minRange/);
+    });
+
+    it("errors when minRange >= maxRange", () => {
+        const block = valid.replace("maxRange: 1000", "maxRange: 500") + "minRange: 500\n";
+        const result = parseBallisticsBlock(block, { view: TABLE_VIEW });
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.error.message).toMatch(/minRange/);
     });
 
     it("applies maxRange and rangeStep defaults when omitted", () => {

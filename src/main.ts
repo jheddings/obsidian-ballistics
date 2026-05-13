@@ -64,10 +64,56 @@ export default class BallisticsPlugin extends Plugin {
                 minEnergy: parsed.value.minEnergy,
                 maxEnergy: parsed.value.maxEnergy,
             });
+            this.alignCopyToEditButton(el);
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             this.logger.error("Trajectory solver failed", e);
             renderError(el, `solver failure: ${msg}`);
         }
+    }
+
+    private alignCopyToEditButton(el: HTMLElement): void {
+        const block = el.querySelector<HTMLElement>(".ballistics-block");
+        const copy = el.querySelector<HTMLElement>(".ballistics-copy");
+        if (!block || !copy) return;
+
+        const tryAlign = (): boolean => {
+            const wrapper = el.parentElement;
+            if (!wrapper) return false;
+            const editBtn = wrapper.querySelector<HTMLElement>(".edit-block-button");
+            if (!editBtn) return false;
+            const blockRect = block.getBoundingClientRect();
+            const editRect = editBtn.getBoundingClientRect();
+            copy.style.top = `${editRect.bottom - blockRect.top + 4}px`;
+            copy.style.right = `${blockRect.right - editRect.right}px`;
+            return true;
+        };
+
+        const parent = el.parentElement;
+        if (parent) this.wireParentHover(parent);
+
+        if (tryAlign()) return;
+        if (!parent) return;
+
+        const observer = new MutationObserver(() => {
+            if (tryAlign()) observer.disconnect();
+        });
+        observer.observe(parent, { childList: true, subtree: true });
+        window.setTimeout(() => observer.disconnect(), 3000);
+    }
+
+    private wireParentHover(parent: HTMLElement): void {
+        if (parent.dataset.ballisticsHover === "1") return;
+        parent.dataset.ballisticsHover = "1";
+        this.registerDomEvent(parent, "mouseenter", () => {
+            parent
+                .querySelectorAll(".ballistics-copy")
+                .forEach((el) => el.classList.add("is-hover"));
+        });
+        this.registerDomEvent(parent, "mouseleave", () => {
+            parent
+                .querySelectorAll(".ballistics-copy")
+                .forEach((el) => el.classList.remove("is-hover"));
+        });
     }
 }

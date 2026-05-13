@@ -1,7 +1,8 @@
 // renderer.ts — builds the trajectory table and error-box DOM.
 
 import type { TrajectoryRow } from "./ballistics";
-import { labels, type UnitSystem } from "./units";
+import { labels, type UnitLabels, type UnitSystem } from "./units";
+import { buildCopyMenu } from "./copyMenu";
 
 export interface RenderOptions {
     includeWindage: boolean;
@@ -10,6 +11,71 @@ export interface RenderOptions {
 }
 
 type RowMark = "max" | "min" | undefined;
+
+interface ColumnSpec {
+    top: string;
+    /** Bottom-row label, expressed as a function of the unit-label table. */
+    bottom: (lbl: UnitLabels) => string;
+    format: (row: TrajectoryRow) => string;
+    /** If present and returns false, the column is omitted. */
+    when?: (options: RenderOptions) => boolean;
+}
+
+const COLUMNS: readonly ColumnSpec[] = [
+    {
+        top: "Range",
+        bottom: (l) => `(${l.range})`,
+        format: (r) => r.range.toFixed(0),
+    },
+    {
+        top: "Elevation",
+        bottom: (l) => `(${l.linear})`,
+        format: (r) => r.elevation.toFixed(2),
+    },
+    {
+        top: "Elevation",
+        bottom: () => "(MOA)",
+        format: (r) => r.elevationMoa.toFixed(2),
+    },
+    {
+        top: "Elevation",
+        bottom: () => "(MIL)",
+        format: (r) => r.elevationMil.toFixed(2),
+    },
+    {
+        top: "Windage",
+        bottom: (l) => `(${l.linear})`,
+        format: (r) => r.windage.toFixed(2),
+        when: (o) => o.includeWindage,
+    },
+    {
+        top: "Windage",
+        bottom: () => "(MOA)",
+        format: (r) => r.windageMoa.toFixed(2),
+        when: (o) => o.includeWindage,
+    },
+    {
+        top: "Windage",
+        bottom: () => "(MIL)",
+        format: (r) => r.windageMil.toFixed(2),
+        when: (o) => o.includeWindage,
+    },
+    {
+        top: "Time",
+        bottom: () => "(s)",
+        format: (r) => r.time.toFixed(3),
+    },
+    {
+        top: "Energy",
+        bottom: (l) => `(${l.energy})`,
+        format: (r) => r.energy.toFixed(0),
+    },
+    {
+        top: "Velocity",
+        bottom: (l) => `(${l.velocity})`,
+        format: (r) => r.velocity.toFixed(0),
+    },
+];
 
 export function renderTrajectoryTable(
     container: HTMLElement,
@@ -20,23 +86,18 @@ export function renderTrajectoryTable(
     const lbl = labels(system);
     const doc = container.ownerDocument;
 
-    const headerTop = ["Range", "Elevation", "Elevation", "Elevation"];
-    const headerBottom = [`(${lbl.range})`, `(${lbl.linear})`, "(MOA)", "(MIL)"];
-    if (options.includeWindage) {
-        headerTop.push("Windage", "Windage", "Windage");
-        headerBottom.push(`(${lbl.linear})`, "(MOA)", "(MIL)");
-    }
-    headerTop.push("Time", "Energy", "Velocity");
-    headerBottom.push("(s)", `(${lbl.energy})`, `(${lbl.velocity})`);
+    const columns = COLUMNS.filter((c) => !c.when || c.when(options));
+    const headerTop = columns.map((c) => c.top);
+    const headerBottom = columns.map((c) => c.bottom(lbl));
+    const bodyCells = rows.map((r) => columns.map((c) => c.format(r)));
+    const flatHeaders = headerTop.map((top, i) => `${top} ${headerBottom[i]}`.trim());
 
     const marks = computeBoundMarks(rows, options.minEnergy, options.maxEnergy);
-    const bodyCells = rows.map((r) => formatCells(r, options));
-    const flatHeaders = headerTop.map((top, i) => `${top} ${headerBottom[i]}`.trim());
 
     const block = doc.createElement("div");
     block.classList.add("ballistics-block");
 
-    block.appendChild(buildCopyButton(doc, flatHeaders, bodyCells));
+    block.appendChild(buildCopyMenu(doc, flatHeaders, bodyCells));
 
     const table = doc.createElement("table");
     table.classList.add("ballistics-table");
@@ -95,20 +156,6 @@ function appendHeaderRow(thead: HTMLTableSectionElement, cells: string[]): void 
     thead.appendChild(tr);
 }
 
-function formatCells(row: TrajectoryRow, options: RenderOptions): string[] {
-    const cells = [
-        row.range.toFixed(0),
-        row.elevation.toFixed(2),
-        row.elevationMoa.toFixed(2),
-        row.elevationMil.toFixed(2),
-    ];
-    if (options.includeWindage) {
-        cells.push(row.windage.toFixed(2), row.windageMoa.toFixed(2), row.windageMil.toFixed(2));
-    }
-    cells.push(row.time.toFixed(3), row.energy.toFixed(0), row.velocity.toFixed(0));
-    return cells;
-}
-
 function buildBodyRow(doc: Document, cells: string[], mark: RowMark): HTMLTableRowElement {
     const tr = doc.createElement("tr");
     if (mark) tr.classList.add("ballistics-bound", `ballistics-bound-${mark}`);
@@ -125,137 +172,4 @@ function buildBodyRow(doc: Document, cells: string[], mark: RowMark): HTMLTableR
         tr.appendChild(td);
     }
     return tr;
-}
-
-function buildCopyButton(doc: Document, headers: string[], rows: string[][]): HTMLElement {
-    const wrap = doc.createElement("div");
-    wrap.classList.add("ballistics-copy");
-
-    const trigger = doc.createElement("button");
-    trigger.type = "button";
-    trigger.classList.add("clickable-icon", "ballistics-copy-trigger");
-    trigger.setAttribute("aria-label", "Copy table");
-    trigger.setAttribute("aria-haspopup", "menu");
-    trigger.setAttribute("aria-expanded", "false");
-    trigger.appendChild(clipboardIcon(doc));
-
-    const menu = doc.createElement("div");
-    menu.classList.add("ballistics-copy-menu");
-    menu.setAttribute("role", "menu");
-
-    const items: HTMLButtonElement[] = [];
-    items.push(
-        menuItem(doc, "Copy as Markdown", () => toMarkdown(headers, rows)),
-        menuItem(doc, "Copy as CSV", () => toCsv(headers, rows))
-    );
-    for (const item of items) menu.appendChild(item);
-
-    let outsideHandler: ((ev: MouseEvent) => void) | null = null;
-
-    const close = () => {
-        wrap.classList.remove("is-open");
-        trigger.setAttribute("aria-expanded", "false");
-        if (outsideHandler) {
-            doc.removeEventListener("mousedown", outsideHandler);
-            outsideHandler = null;
-        }
-    };
-
-    const open = () => {
-        wrap.classList.add("is-open");
-        trigger.setAttribute("aria-expanded", "true");
-        outsideHandler = (ev: MouseEvent) => {
-            if (!wrap.contains(ev.target as Node)) close();
-        };
-        doc.addEventListener("mousedown", outsideHandler);
-    };
-
-    trigger.addEventListener("click", (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        if (wrap.classList.contains("is-open")) close();
-        else open();
-    });
-
-    for (const item of items) {
-        item.addEventListener("click", (ev) => {
-            ev.preventDefault();
-            ev.stopPropagation();
-            const serialize = (item as HTMLButtonElement & { _serialize?: () => string })
-                ._serialize;
-            if (!serialize) return;
-            navigator.clipboard.writeText(serialize()).then(
-                () => flash(item, "Copied"),
-                () => flash(item, "Failed")
-            );
-            close();
-        });
-    }
-
-    wrap.appendChild(trigger);
-    wrap.appendChild(menu);
-    return wrap;
-}
-
-function menuItem(doc: Document, label: string, serialize: () => string): HTMLButtonElement {
-    const btn = doc.createElement("button");
-    btn.type = "button";
-    btn.classList.add("ballistics-copy-item");
-    btn.setAttribute("role", "menuitem");
-    btn.textContent = label;
-    (btn as HTMLButtonElement & { _serialize?: () => string })._serialize = serialize;
-    return btn;
-}
-
-function flash(btn: HTMLButtonElement, text: string): void {
-    const original = btn.textContent;
-    btn.textContent = text;
-    window.setTimeout(() => {
-        btn.textContent = original;
-    }, 900);
-}
-
-function clipboardIcon(doc: Document): SVGSVGElement {
-    const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("viewBox", "0 0 24 24");
-    svg.setAttribute("width", "16");
-    svg.setAttribute("height", "16");
-    svg.setAttribute("fill", "none");
-    svg.setAttribute("stroke", "currentColor");
-    svg.setAttribute("stroke-width", "2");
-    svg.setAttribute("stroke-linecap", "round");
-    svg.setAttribute("stroke-linejoin", "round");
-    svg.setAttribute("aria-hidden", "true");
-
-    const rect = doc.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("x", "8");
-    rect.setAttribute("y", "2");
-    rect.setAttribute("width", "8");
-    rect.setAttribute("height", "4");
-    rect.setAttribute("rx", "1");
-    rect.setAttribute("ry", "1");
-
-    const path = doc.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute(
-        "d",
-        "M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"
-    );
-
-    svg.appendChild(rect);
-    svg.appendChild(path);
-    return svg;
-}
-
-function toMarkdown(headers: string[], rows: string[][]): string {
-    const head = `| ${headers.join(" | ")} |`;
-    const sep = `| ${headers.map(() => "---").join(" | ")} |`;
-    const body = rows.map((r) => `| ${r.join(" | ")} |`).join("\n");
-    return `${head}\n${sep}\n${body}\n`;
-}
-
-function toCsv(headers: string[], rows: string[][]): string {
-    const escape = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
-    const lines = [headers.map(escape).join(",")];
-    for (const r of rows) lines.push(r.map(escape).join(","));
-    return lines.join("\n") + "\n";
 }

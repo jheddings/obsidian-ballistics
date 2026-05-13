@@ -4,9 +4,34 @@ import { Plugin, TFile, type MarkdownPostProcessorContext } from "obsidian";
 import { Logger, LogLevel } from "obskit";
 import { BallisticsPluginSettings } from "./config";
 import { BallisticsSettingsTab } from "./settings";
-import { parseBallisticsBlock, type ParseContext } from "./parser";
+import { parseBallisticsBlock, type ParseContext, type ViewSpec } from "./parser";
 import { solveTrajectory } from "./ballistics";
 import { renderTrajectoryTable, renderError } from "./renderer";
+
+const TABLE_VIEW: ViewSpec = {
+    required: [],
+    optional: ["maxRange", "rangeStep", "minEnergy", "maxEnergy"],
+    defaults: { maxRange: 1000, rangeStep: 100 },
+    validators: {
+        maxRange: (n) => (n <= 0 ? `"maxRange" must be positive (got ${n})` : null),
+        rangeStep: (n) => (n <= 0 ? `"rangeStep" must be positive (got ${n})` : null),
+        minEnergy: (n) => (n < 0 ? `"minEnergy" must be non-negative (got ${n})` : null),
+        maxEnergy: (n) => (n < 0 ? `"maxEnergy" must be non-negative (got ${n})` : null),
+    },
+    crossValidate: (view) => {
+        if (view.rangeStep > view.maxRange) {
+            return `"rangeStep" (${view.rangeStep}) must not exceed "maxRange" (${view.maxRange})`;
+        }
+        if (
+            view.minEnergy !== undefined &&
+            view.maxEnergy !== undefined &&
+            view.maxEnergy <= view.minEnergy
+        ) {
+            return `"maxEnergy" (${view.maxEnergy}) must be greater than "minEnergy" (${view.minEnergy})`;
+        }
+        return null;
+    },
+};
 
 const DEFAULT_SETTINGS: BallisticsPluginSettings = {
     logLevel: LogLevel.ERROR,
@@ -58,11 +83,15 @@ export default class BallisticsPlugin extends Plugin {
             return;
         }
         try {
-            const rows = solveTrajectory(parsed.value, this.settings.units);
+            const { inputs, view } = parsed.value;
+            const rows = solveTrajectory(inputs, this.settings.units, {
+                maxRange: view.maxRange,
+                rangeStep: view.rangeStep,
+            });
             renderTrajectoryTable(el, rows, this.settings.units, {
-                includeWindage: parsed.value.windSpeed > 0,
-                minEnergy: parsed.value.minEnergy,
-                maxEnergy: parsed.value.maxEnergy,
+                includeWindage: inputs.windSpeed > 0,
+                minEnergy: view.minEnergy,
+                maxEnergy: view.maxEnergy,
             });
             this.alignCopyToEditButton(el);
         } catch (e) {
@@ -80,6 +109,7 @@ export default class BallisticsPlugin extends Plugin {
                 if (!dest) return null;
                 return this.readFrontmatter(dest.path);
             },
+            view: TABLE_VIEW,
         };
     }
 

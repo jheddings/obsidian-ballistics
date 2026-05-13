@@ -15,7 +15,7 @@ import {
     UNew,
     Unit,
 } from "js-ballistics";
-import type { ParsedInputs } from "./parser";
+import type { BallisticsInputs } from "./parser";
 import type { UnitSystem } from "./units";
 
 // Hardcoded for v1; configurable bulletDiameter is a v2 addition.
@@ -40,7 +40,18 @@ export interface TrajectoryRow {
     velocity: number;
 }
 
-export function solveTrajectory(inputs: ParsedInputs, system: UnitSystem): TrajectoryRow[] {
+export interface RangeWindow {
+    /** Maximum range to compute, in display units (yd or m). */
+    maxRange: number;
+    /** Step between rows, in display units (yd or m). */
+    rangeStep: number;
+}
+
+export function solveTrajectory(
+    inputs: BallisticsInputs,
+    system: UnitSystem,
+    window: RangeWindow
+): TrajectoryRow[] {
     const dm = new DragModel({
         bc: inputs.bc,
         dragTable: Table.G1,
@@ -87,9 +98,9 @@ export function solveTrajectory(inputs: ParsedInputs, system: UnitSystem): Traje
     calc.setWeaponZero(shot, zeroDistance);
 
     const trajectoryRange =
-        system === "imperial" ? UNew.Yard(inputs.maxRange) : UNew.Meter(inputs.maxRange);
+        system === "imperial" ? UNew.Yard(window.maxRange) : UNew.Meter(window.maxRange);
     const trajectoryStep =
-        system === "imperial" ? UNew.Yard(inputs.rangeStep) : UNew.Meter(inputs.rangeStep);
+        system === "imperial" ? UNew.Yard(window.rangeStep) : UNew.Meter(window.rangeStep);
 
     const result = calc.fire({
         shot,
@@ -116,7 +127,7 @@ export function solveTrajectory(inputs: ParsedInputs, system: UnitSystem): Traje
     }));
 }
 
-function buildAtmo(inputs: ParsedInputs, system: UnitSystem): Atmo {
+function buildAtmo(inputs: BallisticsInputs, system: UnitSystem): Atmo {
     const hasAny =
         inputs.altitude !== undefined ||
         inputs.pressure !== undefined ||

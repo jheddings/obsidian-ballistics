@@ -4,38 +4,11 @@ import { Plugin, TFile, type MarkdownPostProcessorContext } from "obsidian";
 import { Logger, LogLevel } from "obskit";
 import { BallisticsPluginSettings } from "./config";
 import { BallisticsSettingsTab } from "./settings";
-import { parseBallisticsBlock, type ParseContext, type ViewSpec } from "./parser";
+import { parseBallisticsBlock, type ParseContext } from "./parser";
 import { solveTrajectory } from "./ballistics";
 import { renderTrajectoryTable, renderError } from "./renderer";
-
-const TABLE_VIEW: ViewSpec = {
-    required: [],
-    optional: ["minRange", "maxRange", "rangeStep", "minEnergy", "maxEnergy"],
-    defaults: { maxRange: 1000, rangeStep: 100 },
-    validators: {
-        minRange: (n) => (n < 0 ? `"minRange" must be non-negative (got ${n})` : null),
-        maxRange: (n) => (n <= 0 ? `"maxRange" must be positive (got ${n})` : null),
-        rangeStep: (n) => (n <= 0 ? `"rangeStep" must be positive (got ${n})` : null),
-        minEnergy: (n) => (n < 0 ? `"minEnergy" must be non-negative (got ${n})` : null),
-        maxEnergy: (n) => (n < 0 ? `"maxEnergy" must be non-negative (got ${n})` : null),
-    },
-    crossValidate: (view) => {
-        if (view.rangeStep > view.maxRange) {
-            return `"rangeStep" (${view.rangeStep}) must not exceed "maxRange" (${view.maxRange})`;
-        }
-        if (view.minRange !== undefined && view.minRange >= view.maxRange) {
-            return `"minRange" (${view.minRange}) must be less than "maxRange" (${view.maxRange})`;
-        }
-        if (
-            view.minEnergy !== undefined &&
-            view.maxEnergy !== undefined &&
-            view.maxEnergy <= view.minEnergy
-        ) {
-            return `"maxEnergy" (${view.maxEnergy}) must be greater than "minEnergy" (${view.minEnergy})`;
-        }
-        return null;
-    },
-};
+import { alignCopyOverlay, hoverAlreadyWired } from "./positioning";
+import { TABLE_VIEW } from "./views/table";
 
 const DEFAULT_SETTINGS: BallisticsPluginSettings = {
     logLevel: LogLevel.ERROR,
@@ -98,11 +71,21 @@ export default class BallisticsPlugin extends Plugin {
                 minEnergy: view.minEnergy,
                 maxEnergy: view.maxEnergy,
             });
-            this.alignCopyToEditButton(el);
+            this.attachOverlay(el);
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             this.logger.error("Trajectory solver failed", e);
             renderError(el, `solver failure: ${msg}`);
+        }
+    }
+
+    private attachOverlay(el: HTMLElement): void {
+        const handle = alignCopyOverlay(el);
+        if (!handle) return;
+        const parent = el.parentElement;
+        if (parent && !hoverAlreadyWired(parent)) {
+            this.registerDomEvent(parent, "mouseenter", handle.onEnter);
+            this.registerDomEvent(parent, "mouseleave", handle.onLeave);
         }
     }
 
@@ -123,50 +106,5 @@ export default class BallisticsPlugin extends Plugin {
         if (!(file instanceof TFile)) return null;
         const cache = this.app.metadataCache.getFileCache(file);
         return cache?.frontmatter ?? null;
-    }
-
-    private alignCopyToEditButton(el: HTMLElement): void {
-        const block = el.querySelector<HTMLElement>(".ballistics-block");
-        const copy = el.querySelector<HTMLElement>(".ballistics-copy");
-        if (!block || !copy) return;
-
-        const tryAlign = (): boolean => {
-            const wrapper = el.parentElement;
-            if (!wrapper) return false;
-            const editBtn = wrapper.querySelector<HTMLElement>(".edit-block-button");
-            if (!editBtn) return false;
-            const blockRect = block.getBoundingClientRect();
-            const editRect = editBtn.getBoundingClientRect();
-            copy.style.top = `${editRect.bottom - blockRect.top + 4}px`;
-            copy.style.right = `${blockRect.right - editRect.right}px`;
-            return true;
-        };
-
-        const parent = el.parentElement;
-        if (parent) this.wireParentHover(parent);
-
-        if (tryAlign()) return;
-        if (!parent) return;
-
-        const observer = new MutationObserver(() => {
-            if (tryAlign()) observer.disconnect();
-        });
-        observer.observe(parent, { childList: true, subtree: true });
-        window.setTimeout(() => observer.disconnect(), 3000);
-    }
-
-    private wireParentHover(parent: HTMLElement): void {
-        if (parent.dataset.ballisticsHover === "1") return;
-        parent.dataset.ballisticsHover = "1";
-        this.registerDomEvent(parent, "mouseenter", () => {
-            parent
-                .querySelectorAll(".ballistics-copy")
-                .forEach((el) => el.classList.add("is-hover"));
-        });
-        this.registerDomEvent(parent, "mouseleave", () => {
-            parent
-                .querySelectorAll(".ballistics-copy")
-                .forEach((el) => el.classList.remove("is-hover"));
-        });
     }
 }

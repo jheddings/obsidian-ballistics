@@ -128,9 +128,10 @@ export function parseBallisticsBlock(source: string, ctx: ParseContext): ParseRe
         useFm = r.value;
     }
 
+    // Precedence (low → high): use: reference, then local frontmatter, then fence body.
     const inputFields: Record<string, number> = {
-        ...localFm.value,
         ...useFm,
+        ...localFm.value,
         ...body.value.inputs,
     };
 
@@ -262,7 +263,7 @@ function extractFrontmatterFields(
 
         if (!INPUT_KEYS.has(key)) {
             return err(
-                `frontmatter key "${rawKey}" is not a ballistics input — view options like maxRange, rangeStep, minEnergy, maxEnergy belong in the codefence, not in frontmatter`
+                `frontmatter key "${rawKey}" is not a ballistics input — view options belong in the codefence, not in frontmatter`
             );
         }
 

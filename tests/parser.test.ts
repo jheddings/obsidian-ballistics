@@ -1,25 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { parseBallisticsBlock, type BallisticsInputs, type ViewSpec } from "../src/parser";
-
-const TABLE_VIEW: ViewSpec = {
-    required: [],
-    optional: ["minRange", "maxRange", "rangeStep", "minEnergy", "maxEnergy"],
-    defaults: { maxRange: 1000, rangeStep: 100 },
-    validators: {
-        minRange: (n) => (n < 0 ? `"minRange" must be non-negative (got ${n})` : null),
-        maxRange: (n) => (n <= 0 ? `"maxRange" must be positive (got ${n})` : null),
-        rangeStep: (n) => (n <= 0 ? `"rangeStep" must be positive (got ${n})` : null),
-    },
-    crossValidate: (view) => {
-        if (view.rangeStep > view.maxRange) {
-            return `"rangeStep" (${view.rangeStep}) must not exceed "maxRange" (${view.maxRange})`;
-        }
-        if (view.minRange !== undefined && view.minRange >= view.maxRange) {
-            return `"minRange" (${view.minRange}) must be less than "maxRange" (${view.maxRange})`;
-        }
-        return null;
-    },
-};
+import { parseBallisticsBlock, type BallisticsInputs } from "../src/parser";
+import { TABLE_VIEW } from "../src/views/table";
 
 describe("parseBallisticsBlock", () => {
     const valid = `
@@ -299,8 +280,8 @@ bulletWeight: 168
             expect(result.value.inputs.bc).toBe(0.5);
         });
 
-        it("lets use-target override current-note frontmatter", () => {
-            const local = { "ballistics-bc": 0.1 };
+        it("lets current-note frontmatter override use-target", () => {
+            const local = { "ballistics-bc": 0.5 };
             const result = parseBallisticsBlock("use: [[loads/308]]\n", {
                 frontmatter: local,
                 view: TABLE_VIEW,
@@ -308,7 +289,29 @@ bulletWeight: 168
             });
             expect(result.ok).toBe(true);
             if (!result.ok) return;
-            expect(result.value.inputs.bc).toBe(0.475);
+            expect(result.value.inputs.bc).toBe(0.5);
+            // Other use-target fields still flow through.
+            expect(result.value.inputs.bulletWeight).toBe(168);
+        });
+
+        it("applies precedence body > local frontmatter > use:", () => {
+            const local = {
+                "ballistics-bc": 0.5,
+                "ballistics-initial-velocity": 2800,
+            };
+            const result = parseBallisticsBlock("use: [[loads/308]]\ninitialVelocity: 2900\n", {
+                frontmatter: local,
+                view: TABLE_VIEW,
+                resolveUse: () => targetFm,
+            });
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+            // body wins over local frontmatter
+            expect(result.value.inputs.initialVelocity).toBe(2900);
+            // local frontmatter wins over use:
+            expect(result.value.inputs.bc).toBe(0.5);
+            // use: supplies fields not set locally
+            expect(result.value.inputs.bulletWeight).toBe(168);
         });
 
         it("accepts wikilinks with aliases", () => {

@@ -15,7 +15,7 @@ import {
     UNew,
     Unit,
 } from "js-ballistics";
-import type { ParsedInputs } from "./parser";
+import type { BallisticsInputs } from "./parser";
 import type { UnitSystem } from "./units";
 
 // Hardcoded for v1; configurable bulletDiameter is a v2 addition.
@@ -40,7 +40,20 @@ export interface TrajectoryRow {
     velocity: number;
 }
 
-export function solveTrajectory(inputs: ParsedInputs, system: UnitSystem): TrajectoryRow[] {
+export interface RangeWindow {
+    /** Maximum range to compute, in display units (yd or m). */
+    maxRange: number;
+    /** Step between rows, in display units (yd or m). */
+    rangeStep: number;
+    /** Optional minimum range; rows below this are dropped. */
+    minRange?: number;
+}
+
+export function solveTrajectory(
+    inputs: BallisticsInputs,
+    system: UnitSystem,
+    window: RangeWindow
+): TrajectoryRow[] {
     const dm = new DragModel({
         bc: inputs.bc,
         dragTable: Table.G1,
@@ -87,9 +100,9 @@ export function solveTrajectory(inputs: ParsedInputs, system: UnitSystem): Traje
     calc.setWeaponZero(shot, zeroDistance);
 
     const trajectoryRange =
-        system === "imperial" ? UNew.Yard(inputs.maxRange) : UNew.Meter(inputs.maxRange);
+        system === "imperial" ? UNew.Yard(window.maxRange) : UNew.Meter(window.maxRange);
     const trajectoryStep =
-        system === "imperial" ? UNew.Yard(inputs.rangeStep) : UNew.Meter(inputs.rangeStep);
+        system === "imperial" ? UNew.Yard(window.rangeStep) : UNew.Meter(window.rangeStep);
 
     const result = calc.fire({
         shot,
@@ -102,7 +115,7 @@ export function solveTrajectory(inputs: ParsedInputs, system: UnitSystem): Traje
     const velocityUnit = system === "imperial" ? Unit.FPS : Unit.MPS;
     const energyUnit = system === "imperial" ? Unit.FootPound : Unit.Joule;
 
-    return result.trajectory.map((td) => ({
+    const rows: TrajectoryRow[] = result.trajectory.map((td) => ({
         range: td.distance.In(distanceUnit),
         elevation: td.targetDrop.In(linearUnit),
         elevationMoa: td.dropAdjustment.In(Unit.MOA),
@@ -114,9 +127,15 @@ export function solveTrajectory(inputs: ParsedInputs, system: UnitSystem): Traje
         energy: td.energy.In(energyUnit),
         velocity: td.velocity.In(velocityUnit),
     }));
+
+    if (window.minRange !== undefined && window.minRange > 0) {
+        const min = window.minRange;
+        return rows.filter((r) => r.range >= min - 0.5);
+    }
+    return rows;
 }
 
-function buildAtmo(inputs: ParsedInputs, system: UnitSystem): Atmo {
+function buildAtmo(inputs: BallisticsInputs, system: UnitSystem): Atmo {
     const hasAny =
         inputs.altitude !== undefined ||
         inputs.pressure !== undefined ||

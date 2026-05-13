@@ -1,18 +1,18 @@
 import { describe, it, expect } from "vitest";
 import { solveTrajectory, type TrajectoryRow } from "../src/ballistics";
-import type { ParsedInputs } from "../src/parser";
+import type { BallisticsInputs } from "../src/parser";
 
-const referenceInputs: ParsedInputs = {
+const referenceInputs: BallisticsInputs = {
     bc: 0.475,
     initialVelocity: 2700,
     sightHeight: 1.5,
     zeroRange: 100,
-    maxRange: 1000,
-    rangeStep: 50,
     windSpeed: 10,
     windAngle: 90,
     bulletWeight: 168,
 };
+
+const referenceWindow = { maxRange: 1000, rangeStep: 50 };
 
 function rowAt(rows: TrajectoryRow[], range: number): TrajectoryRow {
     const r = rows.find((x) => Math.abs(x.range - range) < 0.5);
@@ -22,7 +22,7 @@ function rowAt(rows: TrajectoryRow[], range: number): TrajectoryRow {
 }
 
 describe("solveTrajectory — imperial reference scenario", () => {
-    const rows = solveTrajectory(referenceInputs, "imperial");
+    const rows = solveTrajectory(referenceInputs, "imperial", referenceWindow);
 
     it("produces 21 rows from 0 to 1000 yd", () => {
         expect(rows.length).toBe(21);
@@ -87,20 +87,43 @@ describe("solveTrajectory — imperial reference scenario", () => {
     });
 });
 
+describe("solveTrajectory — minRange filter", () => {
+    it("drops rows below minRange", () => {
+        const rows = solveTrajectory(referenceInputs, "imperial", {
+            maxRange: 1000,
+            rangeStep: 100,
+            minRange: 300,
+        });
+        expect(rows[0].range).toBeGreaterThanOrEqual(299);
+        expect(rows[rows.length - 1].range).toBeCloseTo(1000, 0);
+    });
+
+    it("is a no-op when minRange is 0 or undefined", () => {
+        const withZero = solveTrajectory(referenceInputs, "imperial", {
+            maxRange: 1000,
+            rangeStep: 100,
+            minRange: 0,
+        });
+        const without = solveTrajectory(referenceInputs, "imperial", {
+            maxRange: 1000,
+            rangeStep: 100,
+        });
+        expect(withZero.length).toBe(without.length);
+    });
+});
+
 describe("solveTrajectory — metric inputs", () => {
     it("accepts metric inputs and returns metric outputs", () => {
-        const metric: ParsedInputs = {
+        const metric: BallisticsInputs = {
             bc: 0.475,
             initialVelocity: 823,
             sightHeight: 3.8,
             zeroRange: 91,
-            maxRange: 914,
-            rangeStep: 91,
             windSpeed: 4.5,
             windAngle: 90,
             bulletWeight: 10.9,
         };
-        const rows = solveTrajectory(metric, "metric");
+        const rows = solveTrajectory(metric, "metric", { maxRange: 914, rangeStep: 91 });
         expect(rows.length).toBeGreaterThan(5);
         const zero = rows.find((r) => Math.abs(r.range - 91) < 1);
         expect(zero).toBeDefined();

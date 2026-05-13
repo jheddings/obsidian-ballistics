@@ -1,12 +1,41 @@
 // main.ts - main entry point for obsidian-ballistics plugin
 
-import { Plugin } from "obsidian";
+import { Plugin, TFile, type MarkdownPostProcessorContext } from "obsidian";
 import { Logger, LogLevel } from "obskit";
 import { BallisticsPluginSettings } from "./config";
 import { BallisticsSettingsTab } from "./settings";
-import { parseBallisticsBlock } from "./parser";
+import { parseBallisticsBlock, type ParseContext, type ViewSpec } from "./parser";
 import { solveTrajectory } from "./ballistics";
 import { renderTrajectoryTable, renderError } from "./renderer";
+
+const TABLE_VIEW: ViewSpec = {
+    required: [],
+    optional: ["minRange", "maxRange", "rangeStep", "minEnergy", "maxEnergy"],
+    defaults: { maxRange: 1000, rangeStep: 100 },
+    validators: {
+        minRange: (n) => (n < 0 ? `"minRange" must be non-negative (got ${n})` : null),
+        maxRange: (n) => (n <= 0 ? `"maxRange" must be positive (got ${n})` : null),
+        rangeStep: (n) => (n <= 0 ? `"rangeStep" must be positive (got ${n})` : null),
+        minEnergy: (n) => (n < 0 ? `"minEnergy" must be non-negative (got ${n})` : null),
+        maxEnergy: (n) => (n < 0 ? `"maxEnergy" must be non-negative (got ${n})` : null),
+    },
+    crossValidate: (view) => {
+        if (view.rangeStep > view.maxRange) {
+            return `"rangeStep" (${view.rangeStep}) must not exceed "maxRange" (${view.maxRange})`;
+        }
+        if (view.minRange !== undefined && view.minRange >= view.maxRange) {
+            return `"minRange" (${view.minRange}) must be less than "maxRange" (${view.maxRange})`;
+        }
+        if (
+            view.minEnergy !== undefined &&
+            view.maxEnergy !== undefined &&
+            view.maxEnergy <= view.minEnergy
+        ) {
+            return `"maxEnergy" (${view.maxEnergy}) must be greater than "minEnergy" (${view.minEnergy})`;
+        }
+        return null;
+    },
+};
 
 const DEFAULT_SETTINGS: BallisticsPluginSettings = {
     logLevel: LogLevel.ERROR,
@@ -23,8 +52,8 @@ export default class BallisticsPlugin extends Plugin {
 
         this.addSettingTab(new BallisticsSettingsTab(this.app, this));
 
-        this.registerMarkdownCodeBlockProcessor("ballistics-table", (source, el) => {
-            this.processBlock(source, el);
+        this.registerMarkdownCodeBlockProcessor("ballistics-table", (source, el, ctx) => {
+            this.processBlock(source, el, ctx);
         });
 
         this.logger.info("Plugin loaded");
@@ -51,18 +80,23 @@ export default class BallisticsPlugin extends Plugin {
         Logger.setGlobalLogLevel(this.settings.logLevel);
     }
 
-    private processBlock(source: string, el: HTMLElement): void {
-        const parsed = parseBallisticsBlock(source);
+    private processBlock(source: string, el: HTMLElement, ctx: MarkdownPostProcessorContext): void {
+        const parsed = parseBallisticsBlock(source, this.buildParseContext(ctx.sourcePath));
         if (!parsed.ok) {
             renderError(el, parsed.error.message);
             return;
         }
         try {
-            const rows = solveTrajectory(parsed.value, this.settings.units);
+            const { inputs, view } = parsed.value;
+            const rows = solveTrajectory(inputs, this.settings.units, {
+                maxRange: view.maxRange,
+                rangeStep: view.rangeStep,
+                minRange: view.minRange,
+            });
             renderTrajectoryTable(el, rows, this.settings.units, {
-                includeWindage: parsed.value.windSpeed > 0,
-                minEnergy: parsed.value.minEnergy,
-                maxEnergy: parsed.value.maxEnergy,
+                includeWindage: inputs.windSpeed > 0,
+                minEnergy: view.minEnergy,
+                maxEnergy: view.maxEnergy,
             });
             this.alignCopyToEditButton(el);
         } catch (e) {
@@ -70,6 +104,25 @@ export default class BallisticsPlugin extends Plugin {
             this.logger.error("Trajectory solver failed", e);
             renderError(el, `solver failure: ${msg}`);
         }
+    }
+
+    private buildParseContext(sourcePath: string): ParseContext {
+        return {
+            frontmatter: this.readFrontmatter(sourcePath),
+            resolveUse: (linkTarget) => {
+                const dest = this.app.metadataCache.getFirstLinkpathDest(linkTarget, sourcePath);
+                if (!dest) return null;
+                return this.readFrontmatter(dest.path);
+            },
+            view: TABLE_VIEW,
+        };
+    }
+
+    private readFrontmatter(path: string): Record<string, unknown> | null {
+        const file = this.app.vault.getAbstractFileByPath(path);
+        if (!(file instanceof TFile)) return null;
+        const cache = this.app.metadataCache.getFileCache(file);
+        return cache?.frontmatter ?? null;
     }
 
     private alignCopyToEditButton(el: HTMLElement): void {

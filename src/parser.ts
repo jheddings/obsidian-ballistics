@@ -24,10 +24,14 @@ export interface ParseError {
 
 export type ParseResult = { ok: true; value: ParsedInputs } | { ok: false; error: ParseError };
 
-// Inputs from a surrounding context (e.g. the note's frontmatter).
-// Resolution: inline body > current-note frontmatter.
+// Inputs from a surrounding context (e.g. the note's frontmatter, or a note
+// referenced via `use:`). Resolution: inline body > use-target frontmatter >
+// current-note frontmatter.
 export interface ParseContext {
     frontmatter?: Record<string, unknown> | null;
+    // Resolve a wikilink target (the inside of `[[...]]`) to that note's
+    // frontmatter, or null if the target cannot be found.
+    resolveUse?: (linkTarget: string) => Record<string, unknown> | null | undefined;
 }
 
 const REQUIRED_KEYS = [
@@ -77,15 +81,32 @@ export function parseBallisticsBlock(source: string, ctx: ParseContext = {}): Pa
     const localFm = extractFrontmatterFields(ctx.frontmatter ?? null);
     if (!localFm.ok) return localFm;
 
+    let useFm: Record<string, number> = {};
+    if (body.value.useRef !== undefined) {
+        if (!ctx.resolveUse) {
+            return err(`"use" references are not supported in this context`);
+        }
+        const target = ctx.resolveUse(body.value.useRef);
+        if (target === undefined || target === null) {
+            return err(
+                `could not resolve "use: [[${body.value.useRef}]]" — no such note in the vault`
+            );
+        }
+        const r = extractFrontmatterFields(target);
+        if (!r.ok) return r;
+        useFm = r.value;
+    }
+
     const fields: Record<string, number> = {
         ...localFm.value,
+        ...useFm,
         ...body.value.fields,
     };
 
     for (const k of REQUIRED_KEYS) {
         if (!(k in fields)) {
             return err(
-                `missing required field "${k}" — set it inline or in this note's frontmatter as "${FRONTMATTER_PREFIX}${toKebab(k)}"`
+                `missing required field "${k}" — set it inline, in this note's frontmatter as "${FRONTMATTER_PREFIX}${toKebab(k)}", or via "use:"`
             );
         }
     }
@@ -116,12 +137,14 @@ export function parseBallisticsBlock(source: string, ctx: ParseContext = {}): Pa
 
 interface BodyParse {
     fields: Record<string, number>;
+    useRef?: string;
 }
 
 function parseBody(
     source: string
 ): { ok: true; value: BodyParse } | { ok: false; error: ParseError } {
     const fields: Record<string, number> = {};
+    let useRef: string | undefined;
 
     const lines = source.split(/\r?\n/);
     for (let i = 0; i < lines.length; i++) {
@@ -136,6 +159,20 @@ function parseBody(
         const rawKey = m[1];
         const valueText = m[2].trim();
 
+        if (rawKey === "use") {
+            if (useRef !== undefined) {
+                return err(`line ${i + 1}: "use" specified more than once`);
+            }
+            const link = parseWikilink(valueText);
+            if (link === null) {
+                return err(
+                    `line ${i + 1}: "use" value must be a wikilink like [[note-name]] (got "${valueText}")`
+                );
+            }
+            useRef = link;
+            continue;
+        }
+
         if (!ALL_KEYS.has(rawKey)) {
             return err(`unknown key "${rawKey}" on line ${i + 1}`);
         }
@@ -149,7 +186,7 @@ function parseBody(
         fields[key] = num;
     }
 
-    return { ok: true, value: { fields } };
+    return { ok: true, value: { fields, useRef } };
 }
 
 function extractFrontmatterFields(
@@ -176,6 +213,13 @@ function extractFrontmatterFields(
         fields[key] = num;
     }
     return { ok: true, value: fields };
+}
+
+function parseWikilink(text: string): string | null {
+    const m = text.match(/^\[\[([^|\]]+?)(?:\|[^\]]*)?\]\]$/);
+    if (!m) return null;
+    const target = m[1].trim();
+    return target === "" ? null : target;
 }
 
 function kebabToCamel(s: string): string {

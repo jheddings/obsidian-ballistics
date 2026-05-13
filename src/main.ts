@@ -75,6 +75,11 @@ export default class BallisticsPlugin extends Plugin {
     private buildParseContext(sourcePath: string): ParseContext {
         return {
             frontmatter: this.readFrontmatter(sourcePath),
+            resolveUse: (linkTarget) => {
+                const dest = this.app.metadataCache.getFirstLinkpathDest(linkTarget, sourcePath);
+                if (!dest) return null;
+                return this.readFrontmatter(dest.path);
+            },
         };
     }
 

@@ -213,4 +213,80 @@ bulletWeight: 168
             expect(result.error.message).toMatch(/ballistics-bullet-weight/);
         });
     });
+
+    describe("use: cross-note reference", () => {
+        const targetFm = {
+            "ballistics-bc": 0.475,
+            "ballistics-initial-velocity": 2700,
+            "ballistics-sight-height": 1.5,
+            "ballistics-zero-range": 100,
+            "ballistics-max-range": 1000,
+            "ballistics-range-step": 50,
+            "ballistics-bullet-weight": 168,
+        };
+
+        it("pulls inputs from the referenced note's frontmatter", () => {
+            const result = parseBallisticsBlock("use: [[loads/308]]\n", {
+                resolveUse: (link) => (link === "loads/308" ? targetFm : null),
+            });
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+            expect(result.value.bc).toBe(0.475);
+            expect(result.value.bulletWeight).toBe(168);
+        });
+
+        it("lets inline body override use-target frontmatter", () => {
+            const result = parseBallisticsBlock("use: [[loads/308]]\nrangeStep: 25\n", {
+                resolveUse: () => targetFm,
+            });
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+            expect(result.value.rangeStep).toBe(25);
+        });
+
+        it("lets use-target override current-note frontmatter", () => {
+            const local = { "ballistics-bc": 0.1 };
+            const result = parseBallisticsBlock("use: [[loads/308]]\n", {
+                frontmatter: local,
+                resolveUse: () => targetFm,
+            });
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+            expect(result.value.bc).toBe(0.475);
+        });
+
+        it("accepts wikilinks with aliases", () => {
+            const result = parseBallisticsBlock("use: [[loads/308|.308 Match]]\n", {
+                resolveUse: (link) => (link === "loads/308" ? targetFm : null),
+            });
+            expect(result.ok).toBe(true);
+        });
+
+        it("rejects a non-wikilink use value", () => {
+            const result = parseBallisticsBlock("use: loads/308\n", {
+                resolveUse: () => targetFm,
+            });
+            expect(result.ok).toBe(false);
+            if (result.ok) return;
+            expect(result.error.message).toMatch(/wikilink/);
+        });
+
+        it("errors when the referenced note cannot be resolved", () => {
+            const result = parseBallisticsBlock("use: [[loads/missing]]\n", {
+                resolveUse: () => null,
+            });
+            expect(result.ok).toBe(false);
+            if (result.ok) return;
+            expect(result.error.message).toMatch(/loads\/missing/);
+        });
+
+        it("errors when use is specified twice", () => {
+            const result = parseBallisticsBlock("use: [[a]]\nuse: [[b]]\n", {
+                resolveUse: () => targetFm,
+            });
+            expect(result.ok).toBe(false);
+            if (result.ok) return;
+            expect(result.error.message).toMatch(/more than once/);
+        });
+    });
 });

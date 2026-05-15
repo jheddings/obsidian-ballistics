@@ -6,7 +6,7 @@ import { BallisticsPluginSettings } from "./config";
 import { BallisticsSettingsTab } from "./settings";
 import { parseBallisticsBlock, type ParseContext } from "./parser";
 import { solveTrajectory } from "./ballistics";
-import { renderTrajectoryTable, renderError } from "./renderer";
+import { renderTrajectoryTable, renderError } from "./tableRenderer";
 import { alignCopyOverlay, hoverAlreadyWired } from "./positioning";
 import { TABLE_VIEW } from "./views/table";
 

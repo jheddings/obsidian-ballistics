@@ -7,6 +7,7 @@ import { BallisticsSettingsTab } from "./settings";
 import { parseBallisticsBlock, type ParseContext } from "./parser";
 import { solveTrajectory } from "./ballistics";
 import { renderTrajectoryTable, renderError } from "./tableRenderer";
+import { renderTrajectoryChart } from "./chartRenderer";
 import { alignCopyOverlay, hoverAlreadyWired } from "./positioning";
 import { TABLE_VIEW } from "./views/table";
 
@@ -27,6 +28,10 @@ export default class BallisticsPlugin extends Plugin {
 
         this.registerMarkdownCodeBlockProcessor("ballistics-table", (source, el, ctx) => {
             this.processBlock(source, el, ctx);
+        });
+
+        this.registerMarkdownCodeBlockProcessor("ballistics-chart", (source, el, ctx) => {
+            this.processChartBlock(source, el, ctx);
         });
 
         this.logger.info("Plugin loaded");
@@ -72,6 +77,35 @@ export default class BallisticsPlugin extends Plugin {
                 maxEnergy: view.maxEnergy,
             });
             this.attachOverlay(el);
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.logger.error("Trajectory solver failed", e);
+            renderError(el, `solver failure: ${msg}`);
+        }
+    }
+
+    private processChartBlock(
+        source: string,
+        el: HTMLElement,
+        ctx: MarkdownPostProcessorContext
+    ): void {
+        const parsed = parseBallisticsBlock(source, this.buildParseContext(ctx));
+        if (!parsed.ok) {
+            renderError(el, parsed.error.message);
+            return;
+        }
+        try {
+            const { inputs, view } = parsed.value;
+            const rows = solveTrajectory(inputs, this.settings.units, {
+                maxRange: view.maxRange,
+                rangeStep: view.rangeStep,
+                minRange: view.minRange,
+            });
+            renderTrajectoryChart(el, rows, this.settings.units, {
+                includeWindage: inputs.windSpeed > 0,
+                minEnergy: view.minEnergy,
+                maxEnergy: view.maxEnergy,
+            });
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             this.logger.error("Trajectory solver failed", e);

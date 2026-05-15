@@ -1,6 +1,44 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import { buildChartSeries, computeBoundMarkers, renderTrajectoryChart } from "../src/chartRenderer";
 import type { TrajectoryRow } from "../src/ballistics";
+
+beforeAll(() => {
+    // happy-dom does not implement a canvas 2D context; uPlot calls many ctx
+    // methods unconditionally during draw. Install a chainable no-op stub so
+    // the renderer can run without unhandled exceptions polluting test output.
+    const stub2D = new Proxy(
+        {},
+        {
+            get: (_target, prop) => {
+                if (prop === "canvas") return document.createElement("canvas");
+                if (prop === "measureText") return () => ({ width: 0 });
+                return () => undefined;
+            },
+            set: () => true,
+        }
+    ) as unknown as CanvasRenderingContext2D;
+
+    HTMLCanvasElement.prototype.getContext = function (
+        this: HTMLCanvasElement,
+        contextId: string
+    ): unknown {
+        if (contextId === "2d") return stub2D;
+        return null;
+    } as HTMLCanvasElement["getContext"];
+
+    // uPlot also constructs Path2D for series rendering; provide a no-op stub.
+    const g = window as unknown as { Path2D?: unknown };
+    if (typeof g.Path2D === "undefined") {
+        g.Path2D = class {
+            addPath(): void {}
+            moveTo(): void {}
+            lineTo(): void {}
+            closePath(): void {}
+            rect(): void {}
+            arc(): void {}
+        };
+    }
+});
 
 function makeRow(over: Partial<TrajectoryRow> = {}): TrajectoryRow {
     return {

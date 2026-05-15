@@ -93,10 +93,13 @@ export function renderTrajectoryChart(
     const markers = computeBoundMarkers(rows, options.minEnergy, options.maxEnergy);
     const colors = readThemeColors(block);
 
-    const width = block.clientWidth || 600;
+    // Live preview can run the processor before the container is laid out,
+    // so clientWidth is 0. Start with a placeholder size and let the
+    // ResizeObserver below set the real width once layout settles.
+    const initialWidth = block.clientWidth || 600;
 
     const opts: uPlot.Options = {
-        width,
+        width: initialWidth,
         height: DEFAULT_HEIGHT,
         scales: {
             x: { time: false },
@@ -132,7 +135,20 @@ export function renderTrajectoryChart(
         },
     };
 
-    new uPlot(opts, [series.x, series.elevation], block);
+    const plot = new uPlot(opts, [series.x, series.elevation], block);
+
+    const win = doc.defaultView;
+    if (win && typeof win.ResizeObserver === "function") {
+        const ro = new win.ResizeObserver((entries) => {
+            for (const entry of entries) {
+                const w = Math.floor(entry.contentRect.width);
+                if (w > 0 && w !== plot.width) {
+                    plot.setSize({ width: w, height: DEFAULT_HEIGHT });
+                }
+            }
+        });
+        ro.observe(block);
+    }
 }
 
 function drawBoundMarkers(u: uPlot, markers: BoundMarkers, color: string): void {

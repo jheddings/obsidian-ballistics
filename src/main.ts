@@ -61,6 +61,9 @@ export default class BallisticsPlugin extends Plugin {
     private processBlock(source: string, el: HTMLElement, ctx: MarkdownPostProcessorContext): void {
         const parsed = parseBallisticsBlock(source, this.buildParseContext(ctx));
         if (!parsed.ok) {
+            this.logger.error(
+                `[${ctx.sourcePath}] ballistics-table parse failed: ${parsed.error.message}`
+            );
             renderError(el, parsed.error.message);
             return;
         }
@@ -91,6 +94,9 @@ export default class BallisticsPlugin extends Plugin {
     ): void {
         const parsed = parseBallisticsBlock(source, this.buildParseContext(ctx));
         if (!parsed.ok) {
+            this.logger.error(
+                `[${ctx.sourcePath}] ballistics-chart parse failed: ${parsed.error.message}`
+            );
             renderError(el, parsed.error.message);
             return;
         }

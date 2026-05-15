@@ -10,7 +10,7 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 // itself scales to its container width; the browser scales the viewBox.
 const VB_WIDTH = 1000;
 const VB_HEIGHT = 400;
-const MARGIN = { top: 20, right: 24, bottom: 50, left: 70 };
+const MARGIN = { top: 20, right: 70, bottom: 50, left: 24 };
 const PLOT_WIDTH = VB_WIDTH - MARGIN.left - MARGIN.right;
 const PLOT_HEIGHT = VB_HEIGHT - MARGIN.top - MARGIN.bottom;
 
@@ -112,6 +112,7 @@ export function renderTrajectoryChart(
     block.appendChild(svg);
 
     appendGrid(svg, xTicks, yTicks, xScale, yScale);
+    appendZeroLine(svg, yTicks, yScale);
     appendAxes(svg, xTicks, yTicks, xScale, yScale, lbl.range, lbl.linear);
     appendSeries(svg, series, xScale, yScale);
     appendBoundMarkers(svg, markers, xScale);
@@ -133,6 +134,15 @@ function appendGrid(
         const y = yScale(t);
         line(g, MARGIN.left, y, MARGIN.left + PLOT_WIDTH, y);
     }
+}
+
+function appendZeroLine(svg: SVGSVGElement, yTicks: number[], yScale: (v: number) => number): void {
+    const min = yTicks[0];
+    const max = yTicks[yTicks.length - 1];
+    if (min > 0 || max < 0) return;
+    const g = svgGroup(svg, "ballistics-chart-zero");
+    const y = yScale(0);
+    line(g, MARGIN.left, y, MARGIN.left + PLOT_WIDTH, y);
 }
 
 function appendAxes(
@@ -163,22 +173,23 @@ function appendAxes(
     });
 
     const yAxis = svgGroup(svg, "ballistics-chart-axis");
-    line(yAxis, MARGIN.left, MARGIN.top, MARGIN.left, axisY);
+    const yAxisX = MARGIN.left + PLOT_WIDTH;
+    line(yAxis, yAxisX, MARGIN.top, yAxisX, axisY);
     for (const t of yTicks) {
         const y = yScale(t);
-        line(yAxis, MARGIN.left - 5, y, MARGIN.left, y);
-        text(yAxis, MARGIN.left - 9, y + 4, formatTick(t), {
-            "text-anchor": "end",
+        line(yAxis, yAxisX, y, yAxisX + 5, y);
+        text(yAxis, yAxisX + 9, y + 4, formatTick(t), {
+            "text-anchor": "start",
             class: "ballistics-chart-tick-label",
         });
     }
-    // Rotated Y-axis label
-    const yLabelX = 18;
+    // Rotated Y-axis label, sitting outboard of the tick labels.
+    const yLabelX = VB_WIDTH - 8;
     const yLabelY = MARGIN.top + PLOT_HEIGHT / 2;
     text(yAxis, yLabelX, yLabelY, `Elevation (${yUnit})`, {
         "text-anchor": "middle",
         class: "ballistics-chart-axis-label",
-        transform: `rotate(-90 ${yLabelX} ${yLabelY})`,
+        transform: `rotate(90 ${yLabelX} ${yLabelY})`,
     });
 }
 

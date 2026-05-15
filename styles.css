@@ -154,6 +154,11 @@
     stroke-width: 1;
 }
 
+.ballistics-chart-zero line {
+    stroke: var(--text-normal, #444);
+    stroke-width: 2;
+}
+
 .ballistics-chart-tick-label,
 .ballistics-chart-axis-label {
     fill: var(--text-muted, #888);

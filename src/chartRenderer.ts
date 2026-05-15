@@ -93,13 +93,28 @@ export function renderTrajectoryChart(
     const markers = computeBoundMarkers(rows, options.minEnergy, options.maxEnergy);
     const colors = readThemeColors(block);
 
-    // Live preview can run the processor before the container is laid out,
-    // so clientWidth is 0. Start with a placeholder size and let the
-    // ResizeObserver below set the real width once layout settles.
-    const initialWidth = block.clientWidth || 600;
+    const win = doc.defaultView;
+    const construct = (): void => {
+        const measured =
+            Math.floor(block.clientWidth) || Math.floor(block.getBoundingClientRect().width) || 600;
+        opts.width = measured;
+        const plot = new uPlot(opts, [series.x, series.elevation], block);
+
+        if (win && typeof win.ResizeObserver === "function") {
+            const ro = new win.ResizeObserver((entries) => {
+                for (const entry of entries) {
+                    const w = Math.floor(entry.contentRect.width);
+                    if (w > 0 && w !== plot.width) {
+                        plot.setSize({ width: w, height: DEFAULT_HEIGHT });
+                    }
+                }
+            });
+            ro.observe(block);
+        }
+    };
 
     const opts: uPlot.Options = {
-        width: initialWidth,
+        width: 600,
         height: DEFAULT_HEIGHT,
         scales: {
             x: { time: false },
@@ -135,19 +150,15 @@ export function renderTrajectoryChart(
         },
     };
 
-    const plot = new uPlot(opts, [series.x, series.elevation], block);
-
-    const win = doc.defaultView;
-    if (win && typeof win.ResizeObserver === "function") {
-        const ro = new win.ResizeObserver((entries) => {
-            for (const entry of entries) {
-                const w = Math.floor(entry.contentRect.width);
-                if (w > 0 && w !== plot.width) {
-                    plot.setSize({ width: w, height: DEFAULT_HEIGHT });
-                }
-            }
-        });
-        ro.observe(block);
+    // Defer construction by one animation frame so live-preview layout
+    // has settled and clientWidth is accurate. uPlot computes its canvas
+    // pixel buffer from the size given at construction; if we build it
+    // before layout, the canvas is sized wrong and stays clipped even
+    // after setSize is called later.
+    if (win && typeof win.requestAnimationFrame === "function") {
+        win.requestAnimationFrame(construct);
+    } else {
+        construct();
     }
 }
 

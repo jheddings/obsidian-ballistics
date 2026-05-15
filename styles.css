@@ -128,6 +128,8 @@
 .ballistics-chart-block {
     margin: 0.5em 0;
     width: 100%;
+    min-height: 320px;
+    overflow: visible;
     color: var(--text-normal);
 }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildChartSeries, computeBoundMarkers } from "../src/chartRenderer";
+import { buildChartSeries, computeBoundMarkers, renderTrajectoryChart } from "../src/chartRenderer";
 import type { TrajectoryRow } from "../src/ballistics";
 
 function makeRow(over: Partial<TrajectoryRow> = {}): TrajectoryRow {
@@ -95,5 +95,37 @@ describe("computeBoundMarkers", () => {
         const markers = computeBoundMarkers(rows, undefined, undefined);
         expect(markers.min).toBeUndefined();
         expect(markers.max).toBeUndefined();
+    });
+});
+
+describe("renderTrajectoryChart", () => {
+    it("appends a .ballistics-chart-block element to the container", () => {
+        const container = document.createElement("div");
+        document.body.appendChild(container);
+        const rows = [
+            makeRow({ range: 0, elevation: 0, energy: 3000 }),
+            makeRow({ range: 100, elevation: -1.2, energy: 2400 }),
+            makeRow({ range: 200, elevation: -5.8, energy: 1900 }),
+        ];
+        renderTrajectoryChart(container, rows, "imperial", { includeWindage: false });
+        expect(container.querySelector(".ballistics-chart-block")).not.toBeNull();
+    });
+
+    it("does not throw when bound markers are present", () => {
+        const container = document.createElement("div");
+        document.body.appendChild(container);
+        const rows = [
+            makeRow({ range: 0, elevation: 0, energy: 3000 }),
+            makeRow({ range: 100, elevation: -1.2, energy: 2400 }),
+            makeRow({ range: 200, elevation: -5.8, energy: 1500 }),
+            makeRow({ range: 300, elevation: -14.0, energy: 900 }),
+        ];
+        expect(() =>
+            renderTrajectoryChart(container, rows, "imperial", {
+                includeWindage: false,
+                minEnergy: 1000,
+                maxEnergy: 2000,
+            })
+        ).not.toThrow();
     });
 });

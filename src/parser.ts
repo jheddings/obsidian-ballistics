@@ -131,8 +131,9 @@ export function parseBallisticsBlock(source: string, ctx: ParseContext): ParseRe
         logFields(ctx, `"use" inputs from [[${body.value.useRef}]]`, useFm);
     }
 
-    logFields(ctx, "local frontmatter", localFm.value);
-    logFields(ctx, "fence body inputs", body.value.inputs);
+    logFields(ctx, "frontmatter inputs", localFm.value);
+    logFields(ctx, "inline inputs", body.value.inputs);
+    logFields(ctx, "view options", body.value.view);
 
     // Precedence (low → high): use: reference, then local frontmatter, then fence body.
     const inputFields: Record<string, number> = {

@@ -8,6 +8,8 @@ export interface RenderOptions {
     includeWindage: boolean;
     minEnergy?: number;
     maxEnergy?: number;
+    /** Solver range step. Used by the chart renderer for X-axis tick spacing. */
+    rangeStep?: number;
 }
 
 type RowMark = "max" | "min" | undefined;

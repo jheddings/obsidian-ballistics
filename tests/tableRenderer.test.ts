@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { renderTrajectoryTable, renderError } from "../src/renderer";
+import { renderTrajectoryTable, renderError } from "../src/tableRenderer";
 import type { TrajectoryRow } from "../src/ballistics";
 
 function makeRow(over: Partial<TrajectoryRow> = {}): TrajectoryRow {

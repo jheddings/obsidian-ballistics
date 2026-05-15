@@ -128,16 +128,49 @@
 .ballistics-chart-block {
     margin: 0.5em 0;
     width: 100%;
-    min-height: 320px;
-    overflow: visible;
     color: var(--text-normal);
 }
 
-.ballistics-chart-block .uplot,
-.ballistics-chart-block .u-wrap {
-    background: transparent;
+.ballistics-chart {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
 }
 
-.ballistics-chart-block .u-legend {
-    display: none;
+.ballistics-chart-series {
+    stroke: var(--text-accent, #5a8fff);
+    stroke-width: 2;
+    fill: none;
+}
+
+.ballistics-chart-axis line {
+    stroke: var(--text-muted, #888);
+    stroke-width: 1;
+}
+
+.ballistics-chart-grid line {
+    stroke: var(--background-modifier-border, #ccc);
+    stroke-width: 1;
+}
+
+.ballistics-chart-tick-label,
+.ballistics-chart-axis-label {
+    fill: var(--text-muted, #888);
+    font-size: 12px;
+    font-family: var(--font-interface, sans-serif);
+}
+
+.ballistics-chart-axis-label {
+    font-weight: 600;
+}
+
+.ballistics-chart-bound-line {
+    stroke: var(--color-red, #d04a4a);
+    stroke-width: 2.5;
+    stroke-dasharray: 8 5;
+}
+
+.ballistics-chart-bound-arrow {
+    fill: var(--color-red, #d04a4a);
 }

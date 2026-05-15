@@ -1,15 +1,21 @@
-// chartRenderer.ts — builds the trajectory chart DOM via uPlot.
+// chartRenderer.ts — builds the trajectory chart DOM as hand-rolled SVG.
 
-import uPlot from "uplot";
 import type { TrajectoryRow } from "./ballistics";
 import { labels, type UnitSystem } from "./units";
 import type { RenderOptions } from "./tableRenderer";
 
-const DEFAULT_HEIGHT = 320;
-const BOUND_COLOR_FALLBACK = "#d04a4a";
-const SERIES_COLOR_FALLBACK = "#5a8fff";
-const AXIS_COLOR_FALLBACK = "#888";
-const GRID_COLOR_FALLBACK = "#ccc";
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+// All chart geometry is expressed in viewBox units. The SVG element
+// itself scales to its container width; the browser scales the viewBox.
+const VB_WIDTH = 1000;
+const VB_HEIGHT = 400;
+const MARGIN = { top: 20, right: 24, bottom: 50, left: 70 };
+const PLOT_WIDTH = VB_WIDTH - MARGIN.left - MARGIN.right;
+const PLOT_HEIGHT = VB_HEIGHT - MARGIN.top - MARGIN.bottom;
+
+const TARGET_TICKS = 6;
+const ARROW_SIZE = 10;
 
 export interface ChartSeries {
     x: number[];
@@ -55,27 +61,6 @@ export function computeBoundMarkers(
     return markers;
 }
 
-interface ThemeColors {
-    series: string;
-    axis: string;
-    grid: string;
-    bound: string;
-}
-
-function readThemeColors(probe: HTMLElement): ThemeColors {
-    const style = probe.ownerDocument.defaultView?.getComputedStyle(probe);
-    const cssVar = (name: string, fallback: string): string => {
-        const v = style?.getPropertyValue(name).trim();
-        return v && v.length > 0 ? v : fallback;
-    };
-    return {
-        series: cssVar("--text-accent", SERIES_COLOR_FALLBACK),
-        axis: cssVar("--text-muted", AXIS_COLOR_FALLBACK),
-        grid: cssVar("--background-modifier-border", GRID_COLOR_FALLBACK),
-        bound: cssVar("--color-red", BOUND_COLOR_FALLBACK),
-    };
-}
-
 export function renderTrajectoryChart(
     container: HTMLElement,
     rows: TrajectoryRow[],
@@ -89,129 +74,256 @@ export function renderTrajectoryChart(
     block.classList.add("ballistics-chart-block");
     container.appendChild(block);
 
+    if (rows.length === 0) return;
+
     const series = buildChartSeries(rows);
     const markers = computeBoundMarkers(rows, options.minEnergy, options.maxEnergy);
-    const colors = readThemeColors(block);
 
-    const win = doc.defaultView;
-    let plot: uPlot | undefined;
-    const handleWidth = (w: number): void => {
-        if (w <= 0) return;
-        if (!plot) {
-            opts.width = w;
-            plot = new uPlot(opts, [series.x, series.elevation], block);
-        } else if (w !== plot.width) {
-            plot.setSize({ width: w, height: DEFAULT_HEIGHT });
-        }
-    };
+    const xMin = series.x[0];
+    const xMax = series.x[series.x.length - 1];
+    const yMin = Math.min(...series.elevation);
+    const yMax = Math.max(...series.elevation);
 
-    const opts: uPlot.Options = {
-        width: 1,
-        height: DEFAULT_HEIGHT,
-        scales: {
-            x: { time: false },
-            y: { auto: true },
-        },
-        axes: [
-            {
-                label: `Range (${lbl.range})`,
-                stroke: colors.axis,
-                grid: { stroke: colors.grid, width: 1 },
-                ticks: { stroke: colors.axis, width: 1 },
-            },
-            {
-                label: `Elevation (${lbl.linear})`,
-                stroke: colors.axis,
-                grid: { stroke: colors.grid, width: 1 },
-                ticks: { stroke: colors.axis, width: 1 },
-            },
-        ],
-        series: [
-            { label: `Range (${lbl.range})` },
-            {
-                label: `Elevation (${lbl.linear})`,
-                stroke: colors.series,
-                width: 2,
-                points: { show: false },
-            },
-        ],
-        legend: { show: false },
-        cursor: { show: false },
-        hooks: {
-            draw: [(u) => drawBoundMarkers(u, markers, colors.bound)],
-        },
-    };
+    const xTicks = niceTicks(xMin, xMax, TARGET_TICKS);
+    const yTicks = niceTicks(yMin, yMax, TARGET_TICKS);
 
-    // Defer construction until ResizeObserver reports a non-zero width.
-    // uPlot computes its canvas pixel buffer from the size given at
-    // construction; building before layout produces a clipped canvas
-    // that setSize cannot recover. Once constructed, the same observer
-    // handles future size changes.
-    if (win && typeof win.ResizeObserver === "function") {
-        const ro = new win.ResizeObserver((entries) => {
-            for (const entry of entries) {
-                handleWidth(Math.floor(entry.contentRect.width));
-            }
-        });
-        ro.observe(block);
-    }
+    const xScale = makeScale(
+        xTicks[0],
+        xTicks[xTicks.length - 1],
+        MARGIN.left,
+        MARGIN.left + PLOT_WIDTH
+    );
+    const yScale = makeScale(
+        yTicks[0],
+        yTicks[yTicks.length - 1],
+        MARGIN.top + PLOT_HEIGHT,
+        MARGIN.top
+    );
 
-    // If layout is already settled (reading mode), this builds immediately
-    // and the ResizeObserver only kicks in on later resizes.
-    handleWidth(Math.floor(block.clientWidth));
+    const svg = doc.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("class", "ballistics-chart");
+    svg.setAttribute("viewBox", `0 0 ${VB_WIDTH} ${VB_HEIGHT}`);
+    svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+    svg.setAttribute("role", "img");
+    svg.setAttribute(
+        "aria-label",
+        `Trajectory chart: range vs elevation in ${lbl.range} and ${lbl.linear}`
+    );
+    block.appendChild(svg);
+
+    appendGrid(svg, xTicks, yTicks, xScale, yScale);
+    appendAxes(svg, xTicks, yTicks, xScale, yScale, lbl.range, lbl.linear);
+    appendSeries(svg, series, xScale, yScale);
+    appendBoundMarkers(svg, markers, xScale);
 }
 
-function drawBoundMarkers(u: uPlot, markers: BoundMarkers, color: string): void {
+function appendGrid(
+    svg: SVGSVGElement,
+    xTicks: number[],
+    yTicks: number[],
+    xScale: (v: number) => number,
+    yScale: (v: number) => number
+): void {
+    const g = svgGroup(svg, "ballistics-chart-grid");
+    for (const t of xTicks) {
+        const x = xScale(t);
+        line(g, x, MARGIN.top, x, MARGIN.top + PLOT_HEIGHT);
+    }
+    for (const t of yTicks) {
+        const y = yScale(t);
+        line(g, MARGIN.left, y, MARGIN.left + PLOT_WIDTH, y);
+    }
+}
+
+function appendAxes(
+    svg: SVGSVGElement,
+    xTicks: number[],
+    yTicks: number[],
+    xScale: (v: number) => number,
+    yScale: (v: number) => number,
+    xUnit: string,
+    yUnit: string
+): void {
+    const axisY = MARGIN.top + PLOT_HEIGHT;
+
+    const xAxis = svgGroup(svg, "ballistics-chart-axis");
+    // Baseline
+    line(xAxis, MARGIN.left, axisY, MARGIN.left + PLOT_WIDTH, axisY);
+    for (const t of xTicks) {
+        const x = xScale(t);
+        line(xAxis, x, axisY, x, axisY + 5);
+        text(xAxis, x, axisY + 20, formatTick(t), {
+            "text-anchor": "middle",
+            class: "ballistics-chart-tick-label",
+        });
+    }
+    text(xAxis, MARGIN.left + PLOT_WIDTH / 2, VB_HEIGHT - 8, `Range (${xUnit})`, {
+        "text-anchor": "middle",
+        class: "ballistics-chart-axis-label",
+    });
+
+    const yAxis = svgGroup(svg, "ballistics-chart-axis");
+    line(yAxis, MARGIN.left, MARGIN.top, MARGIN.left, axisY);
+    for (const t of yTicks) {
+        const y = yScale(t);
+        line(yAxis, MARGIN.left - 5, y, MARGIN.left, y);
+        text(yAxis, MARGIN.left - 9, y + 4, formatTick(t), {
+            "text-anchor": "end",
+            class: "ballistics-chart-tick-label",
+        });
+    }
+    // Rotated Y-axis label
+    const yLabelX = 18;
+    const yLabelY = MARGIN.top + PLOT_HEIGHT / 2;
+    text(yAxis, yLabelX, yLabelY, `Elevation (${yUnit})`, {
+        "text-anchor": "middle",
+        class: "ballistics-chart-axis-label",
+        transform: `rotate(-90 ${yLabelX} ${yLabelY})`,
+    });
+}
+
+function appendSeries(
+    svg: SVGSVGElement,
+    series: ChartSeries,
+    xScale: (v: number) => number,
+    yScale: (v: number) => number
+): void {
+    const d = series.x
+        .map(
+            (x, i) =>
+                `${i === 0 ? "M" : "L"}${xScale(x).toFixed(2)},${yScale(series.elevation[i]).toFixed(2)}`
+        )
+        .join(" ");
+    const path = svg.ownerDocument.createElementNS(SVG_NS, "path");
+    path.setAttribute("d", d);
+    path.setAttribute("class", "ballistics-chart-series");
+    path.setAttribute("fill", "none");
+    svg.appendChild(path);
+}
+
+function appendBoundMarkers(
+    svg: SVGSVGElement,
+    markers: BoundMarkers,
+    xScale: (v: number) => number
+): void {
     if (markers.min === undefined && markers.max === undefined) return;
 
-    const ctx = u.ctx;
-    const top = u.bbox.top;
-    const bottom = u.bbox.top + u.bbox.height;
-    const arrowY = top + 12;
-    const arrowSize = 8;
-
-    ctx.save();
-    ctx.strokeStyle = color;
-    ctx.fillStyle = color;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([6, 4]);
+    const g = svgGroup(svg, "ballistics-chart-bounds");
+    const top = MARGIN.top;
+    const bottom = MARGIN.top + PLOT_HEIGHT;
+    const arrowY = top + ARROW_SIZE;
 
     if (markers.max !== undefined) {
-        const x = u.valToPos(markers.max, "x", true);
-        ctx.beginPath();
-        ctx.moveTo(x, top);
-        ctx.lineTo(x, bottom);
-        ctx.stroke();
-        drawArrow(ctx, x + 4, arrowY, arrowSize, "right");
+        const x = xScale(markers.max);
+        boundLine(g, x, top, bottom);
+        arrow(g, x + 4, arrowY, "right");
     }
-
     if (markers.min !== undefined) {
-        const x = u.valToPos(markers.min, "x", true);
-        ctx.beginPath();
-        ctx.moveTo(x, top);
-        ctx.lineTo(x, bottom);
-        ctx.stroke();
-        drawArrow(ctx, x - 4, arrowY, arrowSize, "left");
+        const x = xScale(markers.min);
+        boundLine(g, x, top, bottom);
+        arrow(g, x - 4, arrowY, "left");
     }
-
-    ctx.restore();
 }
 
-function drawArrow(
-    ctx: CanvasRenderingContext2D,
+function boundLine(parent: SVGElement, x: number, y1: number, y2: number): void {
+    const l = parent.ownerDocument.createElementNS(SVG_NS, "line");
+    l.setAttribute("x1", String(x));
+    l.setAttribute("y1", String(y1));
+    l.setAttribute("x2", String(x));
+    l.setAttribute("y2", String(y2));
+    l.setAttribute("class", "ballistics-chart-bound-line");
+    parent.appendChild(l);
+}
+
+function arrow(parent: SVGElement, x: number, y: number, direction: "left" | "right"): void {
+    const sign = direction === "right" ? 1 : -1;
+    const path = parent.ownerDocument.createElementNS(SVG_NS, "path");
+    const half = ARROW_SIZE / 2;
+    path.setAttribute(
+        "d",
+        `M${x},${y} L${x + sign * ARROW_SIZE},${y - half} L${x + sign * ARROW_SIZE},${y + half} Z`
+    );
+    path.setAttribute("class", "ballistics-chart-bound-arrow");
+    parent.appendChild(path);
+}
+
+function svgGroup(svg: SVGSVGElement, cls: string): SVGGElement {
+    const g = svg.ownerDocument.createElementNS(SVG_NS, "g");
+    g.setAttribute("class", cls);
+    svg.appendChild(g);
+    return g;
+}
+
+function line(parent: SVGElement, x1: number, y1: number, x2: number, y2: number): void {
+    const l = parent.ownerDocument.createElementNS(SVG_NS, "line");
+    l.setAttribute("x1", String(x1));
+    l.setAttribute("y1", String(y1));
+    l.setAttribute("x2", String(x2));
+    l.setAttribute("y2", String(y2));
+    parent.appendChild(l);
+}
+
+function text(
+    parent: SVGElement,
     x: number,
     y: number,
-    size: number,
-    direction: "left" | "right"
+    content: string,
+    attrs: Record<string, string> = {}
 ): void {
-    const sign = direction === "right" ? 1 : -1;
-    ctx.save();
-    ctx.setLineDash([]);
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + sign * size, y - size / 2);
-    ctx.lineTo(x + sign * size, y + size / 2);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
+    const t = parent.ownerDocument.createElementNS(SVG_NS, "text");
+    t.setAttribute("x", String(x));
+    t.setAttribute("y", String(y));
+    for (const [k, v] of Object.entries(attrs)) t.setAttribute(k, v);
+    t.textContent = content;
+    parent.appendChild(t);
+}
+
+function makeScale(
+    domainMin: number,
+    domainMax: number,
+    rangeMin: number,
+    rangeMax: number
+): (v: number) => number {
+    const span = domainMax - domainMin || 1;
+    const slope = (rangeMax - rangeMin) / span;
+    return (v) => rangeMin + (v - domainMin) * slope;
+}
+
+/**
+ * Produce 4–8 round-number ticks spanning [min, max] inclusive. Steps are
+ * chosen from the 1-2-5 sequence times a power of 10.
+ */
+export function niceTicks(min: number, max: number, target: number): number[] {
+    if (!isFinite(min) || !isFinite(max) || min === max) {
+        return [min];
+    }
+    const range = max - min;
+    const roughStep = range / Math.max(1, target - 1);
+    const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
+    const normalized = roughStep / magnitude;
+    let step: number;
+    if (normalized < 1.5) step = 1 * magnitude;
+    else if (normalized < 3) step = 2 * magnitude;
+    else if (normalized < 7) step = 5 * magnitude;
+    else step = 10 * magnitude;
+
+    const start = Math.floor(min / step) * step;
+    const end = Math.ceil(max / step) * step;
+    const ticks: number[] = [];
+    // Guard against floating-point drift producing extra ticks.
+    for (let v = start; v <= end + step / 2; v += step) {
+        ticks.push(roundToStep(v, step));
+    }
+    return ticks;
+}
+
+function roundToStep(v: number, step: number): number {
+    const decimals = Math.max(0, -Math.floor(Math.log10(step)));
+    const factor = Math.pow(10, decimals);
+    return Math.round(v * factor) / factor;
+}
+
+function formatTick(v: number): string {
+    if (Number.isInteger(v)) return String(v);
+    return v.toFixed(1);
 }

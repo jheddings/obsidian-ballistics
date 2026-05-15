@@ -1,44 +1,11 @@
-import { describe, it, expect, beforeAll } from "vitest";
-import { buildChartSeries, computeBoundMarkers, renderTrajectoryChart } from "../src/chartRenderer";
+import { describe, it, expect } from "vitest";
+import {
+    buildChartSeries,
+    computeBoundMarkers,
+    niceTicks,
+    renderTrajectoryChart,
+} from "../src/chartRenderer";
 import type { TrajectoryRow } from "../src/ballistics";
-
-beforeAll(() => {
-    // happy-dom does not implement a canvas 2D context; uPlot calls many ctx
-    // methods unconditionally during draw. Install a chainable no-op stub so
-    // the renderer can run without unhandled exceptions polluting test output.
-    const stub2D = new Proxy(
-        {},
-        {
-            get: (_target, prop) => {
-                if (prop === "canvas") return document.createElement("canvas");
-                if (prop === "measureText") return () => ({ width: 0 });
-                return () => undefined;
-            },
-            set: () => true,
-        }
-    ) as unknown as CanvasRenderingContext2D;
-
-    HTMLCanvasElement.prototype.getContext = function (
-        this: HTMLCanvasElement,
-        contextId: string
-    ): unknown {
-        if (contextId === "2d") return stub2D;
-        return null;
-    } as HTMLCanvasElement["getContext"];
-
-    // uPlot also constructs Path2D for series rendering; provide a no-op stub.
-    const g = window as unknown as { Path2D?: unknown };
-    if (typeof g.Path2D === "undefined") {
-        g.Path2D = class {
-            addPath(): void {}
-            moveTo(): void {}
-            lineTo(): void {}
-            closePath(): void {}
-            rect(): void {}
-            arc(): void {}
-        };
-    }
-});
 
 function makeRow(over: Partial<TrajectoryRow> = {}): TrajectoryRow {
     return {
@@ -88,7 +55,6 @@ describe("buildChartSeries", () => {
 });
 
 describe("computeBoundMarkers", () => {
-    // Rows arranged with energy decreasing as range grows — a realistic trajectory.
     const rows = [
         makeRow({ range: 0, energy: 3000 }),
         makeRow({ range: 100, energy: 2400 }),
@@ -123,7 +89,6 @@ describe("computeBoundMarkers", () => {
 
     it("returns undefined when minEnergy is below the terminal energy (no downward crossing)", () => {
         const markers = computeBoundMarkers(rows, 100, undefined);
-        // Every row satisfies energy >= 100, so no downward crossing occurred — no marker.
         expect(markers.min).toBeUndefined();
     });
 
@@ -134,34 +99,95 @@ describe("computeBoundMarkers", () => {
     });
 });
 
-describe("renderTrajectoryChart", () => {
-    it("appends a .ballistics-chart-block element to the container", () => {
-        const container = document.createElement("div");
-        document.body.appendChild(container);
-        const rows = [
-            makeRow({ range: 0, elevation: 0, energy: 3000 }),
-            makeRow({ range: 100, elevation: -1.2, energy: 2400 }),
-            makeRow({ range: 200, elevation: -5.8, energy: 1900 }),
-        ];
-        renderTrajectoryChart(container, rows, "imperial", { includeWindage: false });
-        expect(container.querySelector(".ballistics-chart-block")).not.toBeNull();
+describe("niceTicks", () => {
+    it("produces inclusive ticks for an integer range", () => {
+        const ticks = niceTicks(0, 1000, 6);
+        expect(ticks[0]).toBe(0);
+        expect(ticks[ticks.length - 1]).toBeGreaterThanOrEqual(1000);
+        expect(ticks.length).toBeGreaterThanOrEqual(4);
+        expect(ticks.length).toBeLessThanOrEqual(10);
     });
 
-    it("does not throw when bound markers are present", () => {
+    it("handles negative domains", () => {
+        const ticks = niceTicks(-300, 0, 6);
+        expect(ticks[0]).toBeLessThanOrEqual(-300);
+        expect(ticks[ticks.length - 1]).toBeGreaterThanOrEqual(0);
+    });
+
+    it("returns a single tick when min equals max", () => {
+        expect(niceTicks(42, 42, 6)).toEqual([42]);
+    });
+});
+
+describe("renderTrajectoryChart", () => {
+    const rows = [
+        makeRow({ range: 0, elevation: 0, energy: 3000 }),
+        makeRow({ range: 100, elevation: -1.2, energy: 2400 }),
+        makeRow({ range: 200, elevation: -5.8, energy: 1900 }),
+        makeRow({ range: 300, elevation: -14.0, energy: 1400 }),
+    ];
+
+    it("appends a .ballistics-chart-block element containing an SVG", () => {
         const container = document.createElement("div");
-        document.body.appendChild(container);
-        const rows = [
-            makeRow({ range: 0, elevation: 0, energy: 3000 }),
-            makeRow({ range: 100, elevation: -1.2, energy: 2400 }),
-            makeRow({ range: 200, elevation: -5.8, energy: 1500 }),
-            makeRow({ range: 300, elevation: -14.0, energy: 900 }),
-        ];
-        expect(() =>
-            renderTrajectoryChart(container, rows, "imperial", {
-                includeWindage: false,
-                minEnergy: 1000,
-                maxEnergy: 2000,
-            })
-        ).not.toThrow();
+        renderTrajectoryChart(container, rows, "imperial", { includeWindage: false });
+        const block = container.querySelector(".ballistics-chart-block");
+        expect(block).not.toBeNull();
+        expect(block?.querySelector("svg.ballistics-chart")).not.toBeNull();
+    });
+
+    it("renders the trajectory series as a single path", () => {
+        const container = document.createElement("div");
+        renderTrajectoryChart(container, rows, "imperial", { includeWindage: false });
+        const path = container.querySelector("path.ballistics-chart-series");
+        expect(path).not.toBeNull();
+        expect(path?.getAttribute("d") ?? "").toMatch(/^M[\d.-]+,[\d.-]+( L[\d.-]+,[\d.-]+)+$/);
+    });
+
+    it("renders axis labels in the active unit system", () => {
+        const container = document.createElement("div");
+        renderTrajectoryChart(container, rows, "imperial", { includeWindage: false });
+        const labels = Array.from(container.querySelectorAll("text.ballistics-chart-axis-label"));
+        const labelText = labels.map((t) => t.textContent ?? "");
+        expect(labelText).toContain("Range (yd)");
+        expect(labelText).toContain("Elevation (in)");
+
+        const container2 = document.createElement("div");
+        renderTrajectoryChart(container2, rows, "metric", { includeWindage: false });
+        const labels2 = Array.from(
+            container2.querySelectorAll("text.ballistics-chart-axis-label")
+        ).map((t) => t.textContent ?? "");
+        expect(labels2).toContain("Range (m)");
+        expect(labels2).toContain("Elevation (cm)");
+    });
+
+    it("draws bound-marker lines and arrows when bounds are crossed", () => {
+        const container = document.createElement("div");
+        renderTrajectoryChart(container, rows, "imperial", {
+            includeWindage: false,
+            minEnergy: 1500,
+            maxEnergy: 2000,
+        });
+        const lines = container.querySelectorAll("line.ballistics-chart-bound-line");
+        const arrows = container.querySelectorAll("path.ballistics-chart-bound-arrow");
+        expect(lines.length).toBe(2);
+        expect(arrows.length).toBe(2);
+    });
+
+    it("omits bound markers when bounds are not crossed", () => {
+        const container = document.createElement("div");
+        renderTrajectoryChart(container, rows, "imperial", {
+            includeWindage: false,
+            minEnergy: 100,
+            maxEnergy: 10000,
+        });
+        expect(container.querySelectorAll("line.ballistics-chart-bound-line").length).toBe(0);
+    });
+
+    it("renders nothing inside the block for an empty trajectory", () => {
+        const container = document.createElement("div");
+        renderTrajectoryChart(container, [], "imperial", { includeWindage: false });
+        const block = container.querySelector(".ballistics-chart-block");
+        expect(block).not.toBeNull();
+        expect(block?.querySelector("svg")).toBeNull();
     });
 });

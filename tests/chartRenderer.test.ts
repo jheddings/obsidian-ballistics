@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildChartSeries } from "../src/chartRenderer";
+import { buildChartSeries, computeBoundMarkers } from "../src/chartRenderer";
 import type { TrajectoryRow } from "../src/ballistics";
 
 function makeRow(over: Partial<TrajectoryRow> = {}): TrajectoryRow {
@@ -46,5 +46,54 @@ describe("buildChartSeries", () => {
         const series = buildChartSeries([]);
         expect(series.x).toEqual([]);
         expect(series.elevation).toEqual([]);
+    });
+});
+
+describe("computeBoundMarkers", () => {
+    // Rows arranged with energy decreasing as range grows — a realistic trajectory.
+    const rows = [
+        makeRow({ range: 0, energy: 3000 }),
+        makeRow({ range: 100, energy: 2400 }),
+        makeRow({ range: 200, energy: 1900 }),
+        makeRow({ range: 300, energy: 1500 }),
+        makeRow({ range: 400, energy: 1100 }),
+        makeRow({ range: 500, energy: 800 }),
+    ];
+
+    it("returns the range where maxEnergy is first crossed (energy <= max)", () => {
+        const markers = computeBoundMarkers(rows, undefined, 2000);
+        expect(markers.max).toBe(200);
+        expect(markers.min).toBeUndefined();
+    });
+
+    it("returns the range where minEnergy is last satisfied (energy >= min)", () => {
+        const markers = computeBoundMarkers(rows, 1000, undefined);
+        expect(markers.min).toBe(400);
+        expect(markers.max).toBeUndefined();
+    });
+
+    it("returns both markers when both bounds are set", () => {
+        const markers = computeBoundMarkers(rows, 1000, 2000);
+        expect(markers.max).toBe(200);
+        expect(markers.min).toBe(400);
+    });
+
+    it("returns undefined for a bound that is set but never crossed (maxEnergy above muzzle)", () => {
+        const markers = computeBoundMarkers(rows, undefined, 10000);
+        expect(markers.max).toBeUndefined();
+    });
+
+    it("returns undefined for a bound that is set but never crossed (minEnergy below terminal)", () => {
+        const markers = computeBoundMarkers(rows, 100, undefined);
+        // Every row satisfies energy >= 100, so the marker is the last row's range.
+        // This is a *valid* crossing (the entire trajectory is above the floor),
+        // so we return the last range, not undefined.
+        expect(markers.min).toBe(500);
+    });
+
+    it("returns undefined when neither bound is set", () => {
+        const markers = computeBoundMarkers(rows, undefined, undefined);
+        expect(markers.min).toBeUndefined();
+        expect(markers.max).toBeUndefined();
     });
 });

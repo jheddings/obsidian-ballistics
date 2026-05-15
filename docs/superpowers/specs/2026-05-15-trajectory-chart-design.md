@@ -81,9 +81,8 @@ this.registerMarkdownCodeBlockProcessor("ballistics-chart", (source, el) => {
 
 Mirror the table's bound-row highlighting on the chart's horizontal axis:
 
-- For each of `minEnergy` and `maxEnergy` that is set, locate the range at which the threshold is crossed by the trajectory's energy column. The crossing logic matches `computeBoundMarks` in the table renderer:
-    - `maxEnergy`: first row where `energy <= maxEnergy`.
-    - `minEnergy`: last row where `energy >= minEnergy`.
+- The chart requires an actual crossing within the trajectory. `maxEnergy` produces a line only if `rows[0].energy > maxEnergy` AND a row satisfying `energy <= maxEnergy` exists; the line is drawn at the first such row's range. `minEnergy` produces a line only if `rows[rows.length - 1].energy < minEnergy` AND a row satisfying `energy >= minEnergy` exists; the line is drawn at the last such row's range.
+- This is stricter than the table's `computeBoundMarks`, which marks row 0 even when the bound was never crossed. The chart's stricter behavior avoids visually misleading lines at chart edges for non-events.
 - At each crossing, draw a **dashed, bold red vertical line** spanning the chart's plotting area.
 - Add an inward-pointing arrow glyph near the top of each line:
     - Max-energy line: right-pointing arrow (→), pointing into the acceptable band.

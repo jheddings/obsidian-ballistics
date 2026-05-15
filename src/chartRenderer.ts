@@ -84,7 +84,10 @@ export function renderTrajectoryChart(
     const yMin = Math.min(...series.elevation);
     const yMax = Math.max(...series.elevation);
 
-    const xTicks = niceTicks(xMin, xMax, TARGET_TICKS);
+    const xTicks =
+        options.rangeStep && options.rangeStep > 0
+            ? rangeStepTicks(xMin, xMax, options.rangeStep, TARGET_TICKS)
+            : niceTicks(xMin, xMax, TARGET_TICKS);
     const yTicks = niceTicks(yMin, yMax, TARGET_TICKS);
 
     const xScale = makeScale(
@@ -298,6 +301,24 @@ function makeScale(
     const span = domainMax - domainMin || 1;
     const slope = (rangeMax - rangeMin) / span;
     return (v) => rangeMin + (v - domainMin) * slope;
+}
+
+/**
+ * Produce ticks aligned to the solver's rangeStep. Picks the smallest
+ * multiple of rangeStep that fits at most `target` ticks across the span.
+ */
+export function rangeStepTicks(min: number, max: number, step: number, target: number): number[] {
+    if (!isFinite(min) || !isFinite(max) || min === max || step <= 0) {
+        return [min];
+    }
+    const totalSteps = Math.round((max - min) / step);
+    const stride = Math.max(1, Math.ceil(totalSteps / Math.max(1, target - 1)));
+    const tickStep = step * stride;
+    const ticks: number[] = [];
+    for (let v = min; v <= max + tickStep / 2; v += tickStep) {
+        ticks.push(roundToStep(v, tickStep));
+    }
+    return ticks;
 }
 
 /**

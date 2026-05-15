@@ -94,6 +94,7 @@ export default class BallisticsPlugin extends Plugin {
                 includeWindage: inputs.windSpeed > 0,
                 minEnergy: view.minEnergy,
                 maxEnergy: view.maxEnergy,
+                rangeStep: view.rangeStep,
             };
             if (kind === "table") {
                 renderTrajectoryTable(el, rows, this.settings.units, opts);

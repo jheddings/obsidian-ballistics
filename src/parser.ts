@@ -54,6 +54,8 @@ export interface ParseContext {
     frontmatter?: Record<string, unknown> | null;
     resolveUse?: (linkTarget: string) => Record<string, unknown> | null | undefined;
     view: ViewSpec;
+    /** Optional debug sink invoked at each input-load step. */
+    debug?: (message: string) => void;
 }
 
 const REQUIRED_INPUTS = [
@@ -126,7 +128,11 @@ export function parseBallisticsBlock(source: string, ctx: ParseContext): ParseRe
         const r = extractFrontmatterFields(target);
         if (!r.ok) return r;
         useFm = r.value;
+        logFields(ctx, `"use" inputs from [[${body.value.useRef}]]`, useFm);
     }
+
+    logFields(ctx, "local frontmatter", localFm.value);
+    logFields(ctx, "fence body inputs", body.value.inputs);
 
     // Precedence (low → high): use: reference, then local frontmatter, then fence body.
     const inputFields: Record<string, number> = {
@@ -307,4 +313,12 @@ function validateInputs(i: BallisticsInputs): string | null {
 
 function err(message: string): { ok: false; error: ParseError } {
     return { ok: false, error: { message } };
+}
+
+function logFields(ctx: ParseContext, label: string, fields: Record<string, number>): void {
+    if (!ctx.debug) return;
+    const keys = Object.keys(fields);
+    if (keys.length === 0) return;
+    const lines = keys.map((k) => `  - ${k}: ${fields[k]}`).join("\n");
+    ctx.debug(`${label}:\n${lines}`);
 }

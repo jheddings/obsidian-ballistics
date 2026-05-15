@@ -54,7 +54,7 @@ export default class BallisticsPlugin extends Plugin {
     }
 
     private processBlock(source: string, el: HTMLElement, ctx: MarkdownPostProcessorContext): void {
-        const parsed = parseBallisticsBlock(source, this.buildParseContext(ctx.sourcePath));
+        const parsed = parseBallisticsBlock(source, this.buildParseContext(ctx));
         if (!parsed.ok) {
             renderError(el, parsed.error.message);
             return;
@@ -89,15 +89,20 @@ export default class BallisticsPlugin extends Plugin {
         }
     }
 
-    private buildParseContext(sourcePath: string): ParseContext {
+    private buildParseContext(ctx: MarkdownPostProcessorContext): ParseContext {
+        const ctxFm = ctx.frontmatter as Record<string, unknown> | null | undefined;
         return {
-            frontmatter: this.readFrontmatter(sourcePath),
+            frontmatter: ctxFm ?? this.readFrontmatter(ctx.sourcePath),
             resolveUse: (linkTarget) => {
-                const dest = this.app.metadataCache.getFirstLinkpathDest(linkTarget, sourcePath);
+                const dest = this.app.metadataCache.getFirstLinkpathDest(
+                    linkTarget,
+                    ctx.sourcePath
+                );
                 if (!dest) return null;
                 return this.readFrontmatter(dest.path);
             },
             view: TABLE_VIEW,
+            debug: (msg) => this.logger.debug(`[${ctx.sourcePath}] ${msg}`),
         };
     }
 

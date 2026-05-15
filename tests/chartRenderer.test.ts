@@ -121,12 +121,10 @@ describe("computeBoundMarkers", () => {
         expect(markers.max).toBeUndefined();
     });
 
-    it("returns undefined for a bound that is set but never crossed (minEnergy below terminal)", () => {
+    it("returns undefined when minEnergy is below the terminal energy (no downward crossing)", () => {
         const markers = computeBoundMarkers(rows, 100, undefined);
-        // Every row satisfies energy >= 100, so the marker is the last row's range.
-        // This is a *valid* crossing (the entire trajectory is above the floor),
-        // so we return the last range, not undefined.
-        expect(markers.min).toBe(500);
+        // Every row satisfies energy >= 100, so no downward crossing occurred — no marker.
+        expect(markers.min).toBeUndefined();
     });
 
     it("returns undefined when neither bound is set", () => {

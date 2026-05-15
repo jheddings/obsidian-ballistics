@@ -42,12 +42,14 @@ export function computeBoundMarkers(
         }
     }
 
-    if (minEnergy !== undefined) {
-        let idx = -1;
-        for (let i = 0; i < rows.length; i++) {
-            if (rows[i].energy >= minEnergy) idx = i;
+    if (minEnergy !== undefined && rows.length > 0) {
+        if (rows[rows.length - 1].energy < minEnergy) {
+            let idx = -1;
+            for (let i = 0; i < rows.length; i++) {
+                if (rows[i].energy >= minEnergy) idx = i;
+            }
+            if (idx !== -1) markers.min = rows[idx].range;
         }
-        if (idx !== -1) markers.min = rows[idx].range;
     }
 
     return markers;

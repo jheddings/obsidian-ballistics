@@ -94,27 +94,19 @@ export function renderTrajectoryChart(
     const colors = readThemeColors(block);
 
     const win = doc.defaultView;
-    const construct = (): void => {
-        const measured =
-            Math.floor(block.clientWidth) || Math.floor(block.getBoundingClientRect().width) || 600;
-        opts.width = measured;
-        const plot = new uPlot(opts, [series.x, series.elevation], block);
-
-        if (win && typeof win.ResizeObserver === "function") {
-            const ro = new win.ResizeObserver((entries) => {
-                for (const entry of entries) {
-                    const w = Math.floor(entry.contentRect.width);
-                    if (w > 0 && w !== plot.width) {
-                        plot.setSize({ width: w, height: DEFAULT_HEIGHT });
-                    }
-                }
-            });
-            ro.observe(block);
+    let plot: uPlot | undefined;
+    const handleWidth = (w: number): void => {
+        if (w <= 0) return;
+        if (!plot) {
+            opts.width = w;
+            plot = new uPlot(opts, [series.x, series.elevation], block);
+        } else if (w !== plot.width) {
+            plot.setSize({ width: w, height: DEFAULT_HEIGHT });
         }
     };
 
     const opts: uPlot.Options = {
-        width: 600,
+        width: 1,
         height: DEFAULT_HEIGHT,
         scales: {
             x: { time: false },
@@ -150,16 +142,23 @@ export function renderTrajectoryChart(
         },
     };
 
-    // Defer construction by one animation frame so live-preview layout
-    // has settled and clientWidth is accurate. uPlot computes its canvas
-    // pixel buffer from the size given at construction; if we build it
-    // before layout, the canvas is sized wrong and stays clipped even
-    // after setSize is called later.
-    if (win && typeof win.requestAnimationFrame === "function") {
-        win.requestAnimationFrame(construct);
-    } else {
-        construct();
+    // Defer construction until ResizeObserver reports a non-zero width.
+    // uPlot computes its canvas pixel buffer from the size given at
+    // construction; building before layout produces a clipped canvas
+    // that setSize cannot recover. Once constructed, the same observer
+    // handles future size changes.
+    if (win && typeof win.ResizeObserver === "function") {
+        const ro = new win.ResizeObserver((entries) => {
+            for (const entry of entries) {
+                handleWidth(Math.floor(entry.contentRect.width));
+            }
+        });
+        ro.observe(block);
     }
+
+    // If layout is already settled (reading mode), this builds immediately
+    // and the ResizeObserver only kicks in on later resizes.
+    handleWidth(Math.floor(block.clientWidth));
 }
 
 function drawBoundMarkers(u: uPlot, markers: BoundMarkers, color: string): void {

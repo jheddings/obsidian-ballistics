@@ -16,11 +16,6 @@ const DEFAULT_SETTINGS: BallisticsPluginSettings = {
     units: "imperial",
 };
 
-// Live preview can invoke the processor before metadataCache has populated
-// frontmatter for the current note. Wait this long for a `changed` event
-// before giving up and rendering the parse error.
-const FRONTMATTER_WAIT_MS = 2000;
-
 type FenceKind = "table" | "chart";
 
 export default class BallisticsPlugin extends Plugin {
@@ -34,11 +29,11 @@ export default class BallisticsPlugin extends Plugin {
         this.addSettingTab(new BallisticsSettingsTab(this.app, this));
 
         this.registerMarkdownCodeBlockProcessor("ballistics-table", (source, el, ctx) => {
-            this.processFence("table", source, el, ctx);
+            return this.processFence("table", source, el, ctx);
         });
 
         this.registerMarkdownCodeBlockProcessor("ballistics-chart", (source, el, ctx) => {
-            this.processFence("chart", source, el, ctx);
+            return this.processFence("chart", source, el, ctx);
         });
 
         this.logger.info("Plugin loaded");
@@ -65,65 +60,25 @@ export default class BallisticsPlugin extends Plugin {
         Logger.setGlobalLogLevel(this.settings.logLevel);
     }
 
-    private processFence(
+    private async processFence(
         kind: FenceKind,
         source: string,
         el: HTMLElement,
         ctx: MarkdownPostProcessorContext
-    ): void {
-        const parseCtx = this.buildParseContext(ctx);
-        const hadFrontmatter = parseCtx.frontmatter !== null;
+    ): Promise<void> {
+        const frontmatter = await this.resolveFrontmatter(ctx);
+        const parseCtx = this.buildParseContext(ctx, frontmatter);
         const parsed = parseBallisticsBlock(source, parseCtx);
 
-        if (parsed.ok) {
-            this.renderParsed(kind, el, parsed);
-            return;
-        }
-
-        // Live-preview cache race: frontmatter wasn't available when the
-        // processor ran, but the note actually has it. Wait briefly for the
-        // metadata cache to resolve, then retry once.
-        const couldBeFrontmatterRace =
-            !hadFrontmatter && /missing required input/.test(parsed.error.message);
-        if (couldBeFrontmatterRace) {
-            this.logger.debug(
-                `[${ctx.sourcePath}] ballistics-${kind} deferring — frontmatter not yet available`
+        if (!parsed.ok) {
+            this.logger.error(
+                `[${ctx.sourcePath}] ballistics-${kind} parse failed: ${parsed.error.message}`
             );
-            this.deferOnFrontmatterReady(
-                ctx.sourcePath,
-                () => this.retryFence(kind, source, el, ctx),
-                () => {
-                    this.logger.error(
-                        `[${ctx.sourcePath}] ballistics-${kind} parse failed (frontmatter never resolved): ${parsed.error.message}`
-                    );
-                    renderError(el, parsed.error.message);
-                }
-            );
+            renderError(el, parsed.error.message);
             return;
         }
 
-        this.logger.error(
-            `[${ctx.sourcePath}] ballistics-${kind} parse failed: ${parsed.error.message}`
-        );
-        renderError(el, parsed.error.message);
-    }
-
-    private retryFence(
-        kind: FenceKind,
-        source: string,
-        el: HTMLElement,
-        ctx: MarkdownPostProcessorContext
-    ): void {
-        const retry = parseBallisticsBlock(source, this.buildParseContext(ctx));
-        while (el.firstChild) el.removeChild(el.firstChild);
-        if (retry.ok) {
-            this.renderParsed(kind, el, retry);
-            return;
-        }
-        this.logger.error(
-            `[${ctx.sourcePath}] ballistics-${kind} parse failed after retry: ${retry.error.message}`
-        );
-        renderError(el, retry.error.message);
+        this.renderParsed(kind, el, parsed);
     }
 
     private renderParsed(kind: FenceKind, el: HTMLElement, parsed: ParseResult): void {
@@ -153,27 +108,6 @@ export default class BallisticsPlugin extends Plugin {
         }
     }
 
-    private deferOnFrontmatterReady(
-        sourcePath: string,
-        onReady: () => void,
-        onTimeout: () => void
-    ): void {
-        let fired = false;
-        const ref = this.app.metadataCache.on("changed", (file) => {
-            if (fired || file.path !== sourcePath) return;
-            fired = true;
-            this.app.metadataCache.offref(ref);
-            window.clearTimeout(timer);
-            onReady();
-        });
-        const timer = window.setTimeout(() => {
-            if (fired) return;
-            fired = true;
-            this.app.metadataCache.offref(ref);
-            onTimeout();
-        }, FRONTMATTER_WAIT_MS);
-    }
-
     private attachOverlay(el: HTMLElement): void {
         const handle = alignCopyOverlay(el);
         if (!handle) return;
@@ -184,32 +118,83 @@ export default class BallisticsPlugin extends Plugin {
         }
     }
 
-    private buildParseContext(ctx: MarkdownPostProcessorContext): ParseContext {
-        const ctxFm = ctx.frontmatter as Record<string, unknown> | null | undefined;
+    private buildParseContext(
+        ctx: MarkdownPostProcessorContext,
+        frontmatter: Record<string, unknown> | null
+    ): ParseContext {
         return {
-            frontmatter: ctxFm ?? this.readFrontmatter(ctx.sourcePath),
+            frontmatter,
             resolveUse: (linkTarget) => {
                 const dest = this.app.metadataCache.getFirstLinkpathDest(
                     linkTarget,
                     ctx.sourcePath
                 );
                 if (!dest) return null;
-                return this.readFrontmatter(dest.path);
+                // "use:" targets a separate note; the metadata cache is
+                // authoritative for them since we have no live-preview race.
+                return this.app.metadataCache.getFileCache(dest)?.frontmatter ?? null;
             },
             view: TABLE_VIEW,
             debug: (msg) => this.logger.debug(`[${ctx.sourcePath}] ${msg}`),
         };
     }
 
-    private readFrontmatter(path: string): Record<string, unknown> | null {
-        // Try the path-keyed cache first — it doesn't require the file to be
-        // resolvable via the vault, which can lag in live preview.
-        const direct = this.app.metadataCache.getCache(path);
-        if (direct?.frontmatter) return direct.frontmatter;
+    /**
+     * Resolve the current note's frontmatter. `ctx.frontmatter` and the
+     * metadata cache are unreliable in live preview — they're often empty
+     * or undefined when the codeblock processor first runs. As a robust
+     * fallback we read the file content via `vault.cachedRead` and parse
+     * the YAML block ourselves.
+     */
+    private async resolveFrontmatter(
+        ctx: MarkdownPostProcessorContext
+    ): Promise<Record<string, unknown> | null> {
+        const ctxFm = ctx.frontmatter as Record<string, unknown> | null | undefined;
+        if (ctxFm && Object.keys(ctxFm).length > 0) return ctxFm;
 
-        const file = this.app.vault.getAbstractFileByPath(path);
+        const cached = this.app.metadataCache.getCache(ctx.sourcePath)?.frontmatter;
+        if (cached && Object.keys(cached).length > 0) return cached;
+
+        const file = this.app.vault.getAbstractFileByPath(ctx.sourcePath);
         if (!(file instanceof TFile)) return null;
-        const cache = this.app.metadataCache.getFileCache(file);
-        return cache?.frontmatter ?? null;
+        try {
+            const text = await this.app.vault.cachedRead(file);
+            return parseFrontmatterBlock(text);
+        } catch (e) {
+            this.logger.debug(`[${ctx.sourcePath}] cachedRead failed: ${String(e)}`);
+            return null;
+        }
     }
+}
+
+/**
+ * Extract a flat key/value map from a YAML frontmatter block at the top of
+ * a markdown file. Handles the subset of YAML the plugin actually uses:
+ * `key: value` lines, optionally quoted strings, numeric values. Returns
+ * null if the file has no frontmatter delimiters.
+ */
+export function parseFrontmatterBlock(text: string): Record<string, unknown> | null {
+    const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/);
+    if (!match) return null;
+
+    const out: Record<string, unknown> = {};
+    for (const raw of match[1].split(/\r?\n/)) {
+        const m = raw.match(/^([A-Za-z][\w-]*)\s*:\s*(.*)$/);
+        if (!m) continue;
+        const key = m[1];
+        let val = m[2].trim();
+        if (
+            (val.startsWith('"') && val.endsWith('"')) ||
+            (val.startsWith("'") && val.endsWith("'"))
+        ) {
+            val = val.slice(1, -1);
+        }
+        if (val === "") {
+            out[key] = "";
+            continue;
+        }
+        const num = Number(val);
+        out[key] = Number.isFinite(num) ? num : val;
+    }
+    return out;
 }

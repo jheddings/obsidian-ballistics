@@ -124,3 +124,18 @@
     font-family: var(--font-monospace);
     white-space: pre-wrap;
 }
+
+.ballistics-chart-block {
+    margin: 0.5em 0;
+    width: 100%;
+    color: var(--text-normal);
+}
+
+.ballistics-chart-block .uplot,
+.ballistics-chart-block .u-wrap {
+    background: transparent;
+}
+
+.ballistics-chart-block .u-legend {
+    display: none;
+}

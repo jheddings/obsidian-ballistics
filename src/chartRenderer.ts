@@ -149,7 +149,6 @@ function drawBoundMarkers(u: uPlot, markers: BoundMarkers, color: string): void 
     ctx.fillStyle = color;
     ctx.lineWidth = 2;
     ctx.setLineDash([6, 4]);
-    ctx.font = "bold 12px sans-serif";
 
     if (markers.max !== undefined) {
         const x = u.valToPos(markers.max, "x", true);

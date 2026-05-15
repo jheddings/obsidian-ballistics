@@ -156,7 +156,8 @@
 
 .ballistics-chart-zero line {
     stroke: var(--text-normal, #444);
-    stroke-width: 2;
+    stroke-width: 1.5;
+    opacity: 0.45;
 }
 
 .ballistics-chart-tick-label,

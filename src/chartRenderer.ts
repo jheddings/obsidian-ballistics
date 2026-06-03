@@ -116,9 +116,23 @@ export function renderTrajectoryChart(
 
     appendGrid(svg, xTicks, yTicks, xScale, yScale);
     appendZeroLine(svg, yTicks, yScale);
+    appendZeroRangeMarker(svg, options.zeroRange, xMin, xMax, xScale);
     appendAxes(svg, xTicks, yTicks, xScale, yScale, lbl.range, lbl.linear);
     appendSeries(svg, series, xScale, yScale);
     appendBoundMarkers(svg, markers, xScale);
+}
+
+function appendZeroRangeMarker(
+    svg: SVGSVGElement,
+    zeroRange: number | undefined,
+    xMin: number,
+    xMax: number,
+    xScale: (v: number) => number
+): void {
+    if (zeroRange === undefined || zeroRange < xMin || zeroRange > xMax) return;
+    const g = svgGroup(svg, "ballistics-chart-zero-range");
+    const x = xScale(zeroRange);
+    line(g, x, MARGIN.top, x, MARGIN.top + PLOT_HEIGHT);
 }
 
 function appendGrid(

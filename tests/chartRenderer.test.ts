@@ -183,6 +183,26 @@ describe("renderTrajectoryChart", () => {
         expect(container.querySelectorAll("line.ballistics-chart-bound-line").length).toBe(0);
     });
 
+    it("draws a vertical marker at zeroRange when in plot range", () => {
+        const container = document.createElement("div");
+        renderTrajectoryChart(container, rows, "imperial", {
+            includeWindage: false,
+            zeroRange: 100,
+        });
+        const g = container.querySelector("g.ballistics-chart-zero-range");
+        expect(g).not.toBeNull();
+        expect(g?.querySelectorAll("line").length).toBe(1);
+    });
+
+    it("omits the zero-range marker when zeroRange is out of plot range", () => {
+        const container = document.createElement("div");
+        renderTrajectoryChart(container, rows, "imperial", {
+            includeWindage: false,
+            zeroRange: 9999,
+        });
+        expect(container.querySelector("g.ballistics-chart-zero-range")).toBeNull();
+    });
+
     it("renders nothing inside the block for an empty trajectory", () => {
         const container = document.createElement("div");
         renderTrajectoryChart(container, [], "imperial", { includeWindage: false });

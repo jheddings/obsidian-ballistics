@@ -95,6 +95,7 @@ export default class BallisticsPlugin extends Plugin {
                 minEnergy: view.minEnergy,
                 maxEnergy: view.maxEnergy,
                 rangeStep: view.rangeStep,
+                zeroRange: inputs.zeroRange,
             };
             if (kind === "table") {
                 renderTrajectoryTable(el, rows, this.settings.units, opts);

@@ -10,9 +10,11 @@ export interface RenderOptions {
     maxEnergy?: number;
     /** Solver range step. Used by the chart renderer for X-axis tick spacing. */
     rangeStep?: number;
+    /** Zero range, marked on table and chart. */
+    zeroRange?: number;
 }
 
-type RowMark = "max" | "min" | undefined;
+type RowMark = "max" | "min" | "zero" | undefined;
 
 interface ColumnSpec {
     top: string;
@@ -94,7 +96,7 @@ export function renderTrajectoryTable(
     const bodyCells = rows.map((r) => columns.map((c) => c.format(r)));
     const flatHeaders = headerTop.map((top, i) => `${top} ${headerBottom[i]}`.trim());
 
-    const marks = computeBoundMarks(rows, options.minEnergy, options.maxEnergy);
+    const marks = computeBoundMarks(rows, options.minEnergy, options.maxEnergy, options.zeroRange);
 
     const block = doc.createElement("div");
     block.classList.add("ballistics-block");
@@ -129,7 +131,8 @@ export function renderError(container: HTMLElement, message: string): void {
 function computeBoundMarks(
     rows: TrajectoryRow[],
     minEnergy: number | undefined,
-    maxEnergy: number | undefined
+    maxEnergy: number | undefined,
+    zeroRange: number | undefined
 ): RowMark[] {
     const marks: RowMark[] = rows.map((): RowMark => undefined);
 
@@ -144,7 +147,24 @@ function computeBoundMarks(
         }
         if (idx !== -1 && marks[idx] === undefined) marks[idx] = "min";
     }
+    if (zeroRange !== undefined) {
+        const idx = nearestRangeIndex(rows, zeroRange);
+        if (idx !== -1 && marks[idx] === undefined) marks[idx] = "zero";
+    }
     return marks;
+}
+
+function nearestRangeIndex(rows: TrajectoryRow[], target: number): number {
+    let best = -1;
+    let bestDist = Infinity;
+    for (let i = 0; i < rows.length; i++) {
+        const d = Math.abs(rows[i].range - target);
+        if (d < bestDist) {
+            bestDist = d;
+            best = i;
+        }
+    }
+    return best;
 }
 
 function appendHeaderRow(thead: HTMLTableSectionElement, cells: string[]): void {
@@ -168,7 +188,7 @@ function buildBodyRow(doc: Document, cells: string[], mark: RowMark): HTMLTableR
         if (i === 0 && mark) {
             const arrow = doc.createElement("span");
             arrow.classList.add("ballistics-bound-arrow");
-            arrow.textContent = mark === "max" ? " ↓" : " ↑";
+            arrow.textContent = mark === "max" ? " ↓" : mark === "min" ? " ↑" : " ⊕";
             td.appendChild(arrow);
         }
         tr.appendChild(td);

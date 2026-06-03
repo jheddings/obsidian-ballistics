@@ -71,3 +71,6 @@ Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `style`, `perf`.
 ```
 
 Examples: `feat/drag-table`, `fix/unit-conversion`, `chore/update-deps`.
+
+NOTE: avoid creating worktrees for changes -- Obsidian plugins are loaded from the main
+tree.

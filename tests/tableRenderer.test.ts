@@ -94,6 +94,24 @@ describe("renderTrajectoryTable", () => {
         renderTrajectoryTable(container, [makeRow()], "imperial", { includeWindage: true });
         expect(container.querySelector("table")?.classList.contains("ballistics-table")).toBe(true);
     });
+
+    it("marks the row nearest zeroRange with a ⊕ indicator", () => {
+        const rows = [makeRow({ range: 0 }), makeRow({ range: 100 }), makeRow({ range: 200 })];
+        renderTrajectoryTable(container, rows, "imperial", {
+            includeWindage: false,
+            zeroRange: 100,
+        });
+        const marked = container.querySelector("tbody tr.ballistics-bound-zero");
+        expect(marked).not.toBeNull();
+        expect(marked?.querySelector(".ballistics-bound-arrow")?.textContent).toContain("⊕");
+    });
+
+    it("does not mark a zero row when zeroRange is omitted", () => {
+        renderTrajectoryTable(container, [makeRow({ range: 100 })], "imperial", {
+            includeWindage: false,
+        });
+        expect(container.querySelector("tr.ballistics-bound-zero")).toBeNull();
+    });
 });
 
 describe("renderError", () => {

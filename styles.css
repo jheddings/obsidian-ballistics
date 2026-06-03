@@ -106,8 +106,13 @@
     background: var(--background-secondary);
 }
 
-.ballistics-table tbody tr.ballistics-bound td {
+.ballistics-table tbody tr.ballistics-bound-max td,
+.ballistics-table tbody tr.ballistics-bound-min td {
     color: var(--text-error);
+    font-weight: 600;
+}
+
+.ballistics-table tbody tr.ballistics-bound-zero td {
     font-weight: 600;
 }
 
@@ -169,6 +174,13 @@
 
 .ballistics-chart-axis-label {
     font-weight: 600;
+}
+
+.ballistics-chart-zero-range line {
+    stroke: var(--text-faint, #888);
+    stroke-width: 1.5;
+    stroke-dasharray: 6 4;
+    opacity: 0.7;
 }
 
 .ballistics-chart-bound-line {

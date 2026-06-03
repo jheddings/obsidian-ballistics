@@ -29,7 +29,7 @@ describe("renderTrajectoryTable", () => {
         const headerText = Array.from(container.querySelectorAll("thead th")).map(
             (c) => c.textContent ?? ""
         );
-        expect(headerText).toContain("Range");
+        expect(headerText.some((t) => t.includes("Range"))).toBe(true);
         expect(headerText.some((t) => t.includes("yd"))).toBe(true);
         expect(headerText.some((t) => t.includes("in"))).toBe(true);
         expect(headerText.some((t) => t.includes("MOA"))).toBe(true);

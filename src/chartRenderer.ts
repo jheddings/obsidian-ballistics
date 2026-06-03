@@ -267,10 +267,8 @@ function arrow(parent: SVGElement, x: number, y: number, direction: "left" | "ri
     const sign = direction === "right" ? 1 : -1;
     const path = parent.ownerDocument.createElementNS(SVG_NS, "path");
     const half = ARROW_SIZE / 2;
-    path.setAttribute(
-        "d",
-        `M${x},${y} L${x + sign * ARROW_SIZE},${y - half} L${x + sign * ARROW_SIZE},${y + half} Z`
-    );
+    const tipX = x + sign * ARROW_SIZE;
+    path.setAttribute("d", `M${x},${y - half} L${x},${y + half} L${tipX},${y} Z`);
     path.setAttribute("class", "ballistics-chart-bound-arrow");
     parent.appendChild(path);
 }

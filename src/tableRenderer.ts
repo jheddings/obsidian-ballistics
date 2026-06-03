@@ -194,7 +194,7 @@ function buildBodyRow(doc: Document, cells: string[], mark: RowMark): HTMLTableR
         if (i === 0 && mark) {
             const arrow = doc.createElement("span");
             arrow.classList.add("ballistics-bound-arrow");
-            arrow.textContent = mark === "max" ? " ↓" : mark === "min" ? " ↑" : " ⊕";
+            arrow.textContent = mark === "max" ? " ▼" : mark === "min" ? " ▲" : " ⊕";
             td.appendChild(arrow);
         }
         tr.appendChild(td);

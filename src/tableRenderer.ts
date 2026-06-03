@@ -17,9 +17,8 @@ export interface RenderOptions {
 type RowMark = "max" | "min" | "zero" | undefined;
 
 interface ColumnSpec {
-    top: string;
-    /** Bottom-row label, expressed as a function of the unit-label table. */
-    bottom: (lbl: UnitLabels) => string;
+    label: string;
+    units: (lbl: UnitLabels) => string;
     format: (row: TrajectoryRow) => string;
     /** If present and returns false, the column is omitted. */
     when?: (options: RenderOptions) => boolean;
@@ -27,56 +26,56 @@ interface ColumnSpec {
 
 const COLUMNS: readonly ColumnSpec[] = [
     {
-        top: "Range",
-        bottom: (l) => `(${l.range})`,
+        label: "Range",
+        units: (l) => l.range,
         format: (r) => r.range.toFixed(0),
     },
     {
-        top: "Elevation",
-        bottom: (l) => `(${l.linear})`,
+        label: "Elevation",
+        units: (l) => l.linear,
         format: (r) => r.elevation.toFixed(2),
     },
     {
-        top: "Elevation",
-        bottom: () => "(MOA)",
+        label: "Elevation",
+        units: () => "MOA",
         format: (r) => r.elevationMoa.toFixed(2),
     },
     {
-        top: "Elevation",
-        bottom: () => "(MIL)",
+        label: "Elevation",
+        units: () => "MIL",
         format: (r) => r.elevationMil.toFixed(2),
     },
     {
-        top: "Windage",
-        bottom: (l) => `(${l.linear})`,
+        label: "Windage",
+        units: (l) => l.linear,
         format: (r) => r.windage.toFixed(2),
         when: (o) => o.includeWindage,
     },
     {
-        top: "Windage",
-        bottom: () => "(MOA)",
+        label: "Windage",
+        units: () => "MOA",
         format: (r) => r.windageMoa.toFixed(2),
         when: (o) => o.includeWindage,
     },
     {
-        top: "Windage",
-        bottom: () => "(MIL)",
+        label: "Windage",
+        units: () => "MIL",
         format: (r) => r.windageMil.toFixed(2),
         when: (o) => o.includeWindage,
     },
     {
-        top: "Time",
-        bottom: () => "(s)",
+        label: "Time",
+        units: () => "s",
         format: (r) => r.time.toFixed(3),
     },
     {
-        top: "Energy",
-        bottom: (l) => `(${l.energy})`,
+        label: "Energy",
+        units: (l) => l.energy,
         format: (r) => r.energy.toFixed(0),
     },
     {
-        top: "Velocity",
-        bottom: (l) => `(${l.velocity})`,
+        label: "Velocity",
+        units: (l) => l.velocity,
         format: (r) => r.velocity.toFixed(0),
     },
 ];
@@ -91,24 +90,22 @@ export function renderTrajectoryTable(
     const doc = container.ownerDocument;
 
     const columns = COLUMNS.filter((c) => !c.when || c.when(options));
-    const headerTop = columns.map((c) => c.top);
-    const headerBottom = columns.map((c) => c.bottom(lbl));
+    const headerParts = columns.map((c) => ({ label: c.label, units: c.units(lbl) }));
+    const copyHeaders = headerParts.map((h) => `${h.label} (${h.units})`);
     const bodyCells = rows.map((r) => columns.map((c) => c.format(r)));
-    const flatHeaders = headerTop.map((top, i) => `${top} ${headerBottom[i]}`.trim());
 
     const marks = computeBoundMarks(rows, options.minEnergy, options.maxEnergy, options.zeroRange);
 
     const block = doc.createElement("div");
     block.classList.add("ballistics-block");
 
-    block.appendChild(buildCopyMenu(doc, flatHeaders, bodyCells));
+    block.appendChild(buildCopyMenu(doc, copyHeaders, bodyCells));
 
     const table = doc.createElement("table");
     table.classList.add("ballistics-table");
 
     const thead = doc.createElement("thead");
-    appendHeaderRow(thead, headerTop);
-    appendHeaderRow(thead, headerBottom);
+    appendHeaderRow(thead, headerParts);
     table.appendChild(thead);
 
     const tbody = doc.createElement("tbody");
@@ -167,12 +164,21 @@ function nearestRangeIndex(rows: TrajectoryRow[], target: number): number {
     return best;
 }
 
-function appendHeaderRow(thead: HTMLTableSectionElement, cells: string[]): void {
-    const tr = thead.ownerDocument.createElement("tr");
-    for (const text of cells) {
-        const th = thead.ownerDocument.createElement("th");
+function appendHeaderRow(
+    thead: HTMLTableSectionElement,
+    cells: { label: string; units: string }[]
+): void {
+    const doc = thead.ownerDocument;
+    const tr = doc.createElement("tr");
+    for (const { label, units } of cells) {
+        const th = doc.createElement("th");
         th.scope = "col";
-        th.textContent = text;
+        th.appendChild(doc.createTextNode(label));
+        th.appendChild(doc.createElement("br"));
+        const unitSpan = doc.createElement("span");
+        unitSpan.classList.add("ballistics-header-units");
+        unitSpan.textContent = `(${units})`;
+        th.appendChild(unitSpan);
         tr.appendChild(th);
     }
     thead.appendChild(tr);

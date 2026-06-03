@@ -136,6 +136,46 @@ bulletWeight: 168
         expect(result.ok).toBe(false);
     });
 
+    it("defaults zeroOffset to 0 when omitted", () => {
+        const result = parseBallisticsBlock(valid, { view: TABLE_VIEW });
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.value.inputs.zeroOffset).toBe(0);
+    });
+
+    it("accepts zeroOffset as an inline input", () => {
+        const block = valid + "zeroOffset: 2\n";
+        const result = parseBallisticsBlock(block, { view: TABLE_VIEW });
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.value.inputs.zeroOffset).toBe(2);
+    });
+
+    it("accepts a negative zeroOffset", () => {
+        const block = valid + "zeroOffset: -1.5\n";
+        const result = parseBallisticsBlock(block, { view: TABLE_VIEW });
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.value.inputs.zeroOffset).toBe(-1.5);
+    });
+
+    it("accepts zeroOffset from frontmatter as ballistics-zero-offset", () => {
+        const result = parseBallisticsBlock("", {
+            frontmatter: {
+                "ballistics-bc": 0.475,
+                "ballistics-initial-velocity": 2700,
+                "ballistics-sight-height": 1.5,
+                "ballistics-zero-range": 100,
+                "ballistics-bullet-weight": 168,
+                "ballistics-zero-offset": 2,
+            },
+            view: TABLE_VIEW,
+        });
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.value.inputs.zeroOffset).toBe(2);
+    });
+
     it("accepts minRange as a view option", () => {
         const block = valid + "minRange: 200\n";
         const result = parseBallisticsBlock(block, { view: TABLE_VIEW });

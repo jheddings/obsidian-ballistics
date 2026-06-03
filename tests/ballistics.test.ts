@@ -10,6 +10,7 @@ const referenceInputs: BallisticsInputs = {
     windSpeed: 10,
     windAngle: 90,
     bulletWeight: 168,
+    zeroOffset: 0,
 };
 
 const referenceWindow = { maxRange: 1000, rangeStep: 50 };
@@ -112,6 +113,53 @@ describe("solveTrajectory — minRange filter", () => {
     });
 });
 
+describe("solveTrajectory — zeroOffset", () => {
+    it("shifts impact at the zero range by zeroOffset (imperial)", () => {
+        const rows = solveTrajectory(
+            { ...referenceInputs, zeroOffset: 2 },
+            "imperial",
+            referenceWindow
+        );
+        const r = rowAt(rows, 100);
+        expect(r.elevation).toBeCloseTo(2, 0);
+    });
+
+    it("accepts negative zeroOffset (impact below LOS at zero range)", () => {
+        const rows = solveTrajectory(
+            { ...referenceInputs, zeroOffset: -2 },
+            "imperial",
+            referenceWindow
+        );
+        const r = rowAt(rows, 100);
+        expect(r.elevation).toBeCloseTo(-2, 0);
+    });
+
+    it("preserves drop at long range relative to default zero", () => {
+        const base = solveTrajectory(referenceInputs, "imperial", referenceWindow);
+        const offset = solveTrajectory(
+            { ...referenceInputs, zeroOffset: 2 },
+            "imperial",
+            referenceWindow
+        );
+        // Δelevation at 500 yd should be ~ 2 * (500/100) = 10 in (small-angle).
+        const dz = rowAt(offset, 500).elevation - rowAt(base, 500).elevation;
+        expect(dz).toBeGreaterThan(9);
+        expect(dz).toBeLessThan(11);
+    });
+
+    it("is a no-op when zeroOffset is 0", () => {
+        const a = solveTrajectory(referenceInputs, "imperial", referenceWindow);
+        const b = solveTrajectory(
+            { ...referenceInputs, zeroOffset: 0 },
+            "imperial",
+            referenceWindow
+        );
+        for (let i = 0; i < a.length; i++) {
+            expect(b[i].elevation).toBeCloseTo(a[i].elevation, 6);
+        }
+    });
+});
+
 describe("solveTrajectory — metric inputs", () => {
     it("accepts metric inputs and returns metric outputs", () => {
         const metric: BallisticsInputs = {
@@ -122,6 +170,7 @@ describe("solveTrajectory — metric inputs", () => {
             windSpeed: 4.5,
             windAngle: 90,
             bulletWeight: 10.9,
+            zeroOffset: 0,
         };
         const rows = solveTrajectory(metric, "metric", { maxRange: 914, rangeStep: 91 });
         expect(rows.length).toBeGreaterThan(5);

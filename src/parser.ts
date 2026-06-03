@@ -18,6 +18,7 @@ export interface BallisticsInputs {
     bulletWeight: number;
     windSpeed: number;
     windAngle: number;
+    zeroOffset: number;
     altitude?: number;
     pressure?: number;
     temperature?: number;
@@ -69,6 +70,7 @@ const REQUIRED_INPUTS = [
 const OPTIONAL_INPUTS = [
     "windSpeed",
     "windAngle",
+    "zeroOffset",
     "altitude",
     "pressure",
     "temperature",
@@ -78,6 +80,7 @@ const OPTIONAL_INPUTS = [
 const INPUT_DEFAULTS: Record<string, number> = {
     windSpeed: 0,
     windAngle: 0,
+    zeroOffset: 0,
 };
 
 const KEY_ALIASES: Record<string, string> = {
@@ -158,6 +161,7 @@ export function parseBallisticsBlock(source: string, ctx: ParseContext): ParseRe
         bulletWeight: inputFields.bulletWeight,
         windSpeed: inputFields.windSpeed ?? INPUT_DEFAULTS.windSpeed,
         windAngle: inputFields.windAngle ?? INPUT_DEFAULTS.windAngle,
+        zeroOffset: inputFields.zeroOffset ?? INPUT_DEFAULTS.zeroOffset,
         altitude: "altitude" in inputFields ? inputFields.altitude : undefined,
         pressure: "pressure" in inputFields ? inputFields.pressure : undefined,
         temperature: "temperature" in inputFields ? inputFields.temperature : undefined,

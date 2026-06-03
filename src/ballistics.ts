@@ -99,6 +99,15 @@ export function solveTrajectory(
         system === "imperial" ? UNew.Yard(inputs.zeroRange) : UNew.Meter(inputs.zeroRange);
     calc.setWeaponZero(shot, zeroDistance);
 
+    if (inputs.zeroOffset !== 0) {
+        const linearUnit = system === "imperial" ? Unit.Inch : Unit.Centimeter;
+        const offsetLinear = inputs.zeroOffset;
+        const zeroLinear = zeroDistance.In(linearUnit);
+        const deltaRad = Math.atan(offsetLinear / zeroLinear);
+        const currentRad = weapon.zeroElevation.In(Unit.Radian);
+        weapon.zeroElevation = UNew.Radian(currentRad + deltaRad);
+    }
+
     const trajectoryRange =
         system === "imperial" ? UNew.Yard(window.maxRange) : UNew.Meter(window.maxRange);
     const trajectoryStep =

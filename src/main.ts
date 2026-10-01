@@ -5,7 +5,9 @@ import { Logger, LogLevel } from "obskit";
 import { BallisticsPluginSettings } from "./config";
 import { BallisticsSettingsTab } from "./settings";
 import { parseBallisticsBlock, type ParseContext, type ParseResult } from "./parser";
-import { solveTrajectory } from "./ballistics";
+import { initSolver, solveTrajectory } from "./ballistics";
+import { DEV_BUILD } from "./buildInfo";
+import { renderDevMarker } from "./devMarker";
 import { renderTrajectoryTable, renderError } from "./tableRenderer";
 import { renderTrajectoryChart } from "./chartRenderer";
 import { alignCopyOverlay, hoverAlreadyWired } from "./positioning";
@@ -22,8 +24,11 @@ export default class BallisticsPlugin extends Plugin {
     settings!: BallisticsPluginSettings;
 
     private logger: Logger = Logger.getLogger("main");
+    private loadedAt = new Date();
+    private solverReady: Promise<void> | null = null;
 
     async onload() {
+        this.loadedAt = new Date();
         await this.loadSettings();
 
         this.addSettingTab(new BallisticsSettingsTab(this.app, this));
@@ -89,6 +94,7 @@ export default class BallisticsPlugin extends Plugin {
         if (!parsed.ok) return;
         try {
             const { inputs, view } = parsed.value;
+            await this.ensureSolver();
             const rows = await solveTrajectory(inputs, this.settings.units, {
                 maxRange: view.maxRange,
                 rangeStep: view.rangeStep,
@@ -107,11 +113,27 @@ export default class BallisticsPlugin extends Plugin {
             } else {
                 renderTrajectoryChart(el, rows, this.settings.units, opts);
             }
+            renderDevMarker(el, this.loadedAt);
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             this.logger.error("Trajectory solver failed", e);
             renderError(el, `solver failure: ${msg}`);
         }
+    }
+
+    /** Load the WASM solver once, logging the plugin version and load time. */
+    private ensureSolver(): Promise<void> {
+        this.solverReady ??= this.loadSolver();
+        return this.solverReady;
+    }
+
+    private async loadSolver(): Promise<void> {
+        const start = performance.now();
+        await initSolver();
+        const elapsed = Math.round(performance.now() - start);
+        this.logger.debug(
+            `Solver ready in ${elapsed} ms: ${this.manifest.name} ${this.manifest.version}${DEV_BUILD ? " (dev build)" : ""}`
+        );
     }
 
     private attachOverlay(el: HTMLElement): void {

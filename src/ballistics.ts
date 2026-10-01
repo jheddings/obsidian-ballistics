@@ -16,6 +16,7 @@ import {
     Wind,
     UNew,
     Unit,
+    WasmManager,
 } from "js-ballistics";
 import type { BallisticsInputs } from "./parser";
 import type { UnitSystem } from "./units";
@@ -49,6 +50,14 @@ export interface RangeWindow {
     rangeStep: number;
     /** Optional minimum range; rows below this are dropped. */
     minRange?: number;
+}
+
+/**
+ * Load the WASM solver. Solving does this implicitly; calling it first lets a
+ * caller time the one-off load. Safe to call repeatedly.
+ */
+export async function initSolver(): Promise<void> {
+    await WasmManager.init();
 }
 
 export async function solveTrajectory(

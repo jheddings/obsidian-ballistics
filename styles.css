@@ -188,3 +188,8 @@
 .ballistics-chart-bound-arrow {
     fill: var(--color-red, #d04a4a);
 }
+
+.ballistics-dev-marker {
+    font-size: var(--font-ui-smaller);
+    color: var(--text-faint);
+}

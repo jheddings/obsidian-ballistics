@@ -78,14 +78,18 @@ export default class BallisticsPlugin extends Plugin {
             return;
         }
 
-        this.renderParsed(kind, el, parsed);
+        await this.renderParsed(kind, el, parsed);
     }
 
-    private renderParsed(kind: FenceKind, el: HTMLElement, parsed: ParseResult): void {
+    private async renderParsed(
+        kind: FenceKind,
+        el: HTMLElement,
+        parsed: ParseResult
+    ): Promise<void> {
         if (!parsed.ok) return;
         try {
             const { inputs, view } = parsed.value;
-            const rows = solveTrajectory(inputs, this.settings.units, {
+            const rows = await solveTrajectory(inputs, this.settings.units, {
                 maxRange: view.maxRange,
                 rangeStep: view.rangeStep,
                 minRange: view.minRange,

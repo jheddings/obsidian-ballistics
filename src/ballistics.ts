@@ -1,12 +1,14 @@
 // ballistics.ts — adapter over js-ballistics. Converts ParsedInputs into the
-// library's typed inputs, runs the RK4 engine, and projects each TrajectoryData
+// library's typed inputs, runs the RK4 solver, and projects each TrajectoryData
 // row down to the simple numeric TrajectoryRow consumed by the renderer.
+//
+// The solver is a WASM module; Calculator initializes it on first use, which
+// is why solving is async.
 
 import {
     Calculator,
-    RK4IntegrationEngine,
+    IntegrationMethod,
     DragModel,
-    Table,
     Ammo,
     Weapon,
     Shot,
@@ -49,14 +51,14 @@ export interface RangeWindow {
     minRange?: number;
 }
 
-export function solveTrajectory(
+export async function solveTrajectory(
     inputs: BallisticsInputs,
     system: UnitSystem,
     window: RangeWindow
-): TrajectoryRow[] {
+): Promise<TrajectoryRow[]> {
     const dm = new DragModel({
         bc: inputs.bc,
-        dragTable: Table.G1,
+        dragTable: "G1",
         weight:
             system === "imperial"
                 ? UNew.Grain(inputs.bulletWeight)
@@ -94,10 +96,10 @@ export function solveTrajectory(
         winds,
     });
 
-    const calc = new Calculator({ engine: RK4IntegrationEngine });
+    const calc = new Calculator({ method: IntegrationMethod.RK4 });
     const zeroDistance =
         system === "imperial" ? UNew.Yard(inputs.zeroRange) : UNew.Meter(inputs.zeroRange);
-    calc.setWeaponZero(shot, zeroDistance);
+    await calc.setWeaponZero(shot, zeroDistance);
 
     if (inputs.zeroOffset !== 0) {
         const linearUnit = system === "imperial" ? Unit.Inch : Unit.Centimeter;
@@ -113,7 +115,7 @@ export function solveTrajectory(
     const trajectoryStep =
         system === "imperial" ? UNew.Yard(window.rangeStep) : UNew.Meter(window.rangeStep);
 
-    const result = calc.fire({
+    const result = await calc.fire({
         shot,
         trajectoryRange,
         trajectoryStep,
@@ -126,12 +128,12 @@ export function solveTrajectory(
 
     const rows: TrajectoryRow[] = result.trajectory.map((td) => ({
         range: td.distance.In(distanceUnit),
-        elevation: td.targetDrop.In(linearUnit),
-        elevationMoa: td.dropAdjustment.In(Unit.MOA),
-        elevationMil: td.dropAdjustment.In(Unit.MIL),
+        elevation: td.slantHeight.In(linearUnit),
+        elevationMoa: td.dropAngle.In(Unit.MOA),
+        elevationMil: td.dropAngle.In(Unit.MIL),
         windage: td.windage.In(linearUnit),
-        windageMoa: td.windageAdjustment.In(Unit.MOA),
-        windageMil: td.windageAdjustment.In(Unit.MIL),
+        windageMoa: td.windageAngle.In(Unit.MOA),
+        windageMil: td.windageAngle.In(Unit.MIL),
         time: td.time,
         energy: td.energy.In(energyUnit),
         velocity: td.velocity.In(velocityUnit),
@@ -157,19 +159,19 @@ function buildAtmo(inputs: BallisticsInputs, system: UnitSystem): Atmo {
             ? system === "imperial"
                 ? UNew.Foot(inputs.altitude)
                 : UNew.Meter(inputs.altitude)
-            : null;
+            : undefined;
     const pressure =
         inputs.pressure !== undefined
             ? system === "imperial"
                 ? UNew.InHg(inputs.pressure)
                 : UNew.hPa(inputs.pressure)
-            : null;
+            : undefined;
     const temperature =
         inputs.temperature !== undefined
             ? system === "imperial"
                 ? UNew.Fahrenheit(inputs.temperature)
                 : UNew.Celsius(inputs.temperature)
-            : null;
+            : undefined;
     const humidity = inputs.humidity !== undefined ? inputs.humidity / 100 : 0;
 
     return new Atmo({ altitude, pressure, temperature, humidity });

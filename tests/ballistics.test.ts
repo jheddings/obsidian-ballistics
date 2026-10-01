@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import { solveTrajectory, type TrajectoryRow } from "../src/ballistics";
 import type { BallisticsInputs } from "../src/parser";
 
@@ -23,7 +23,10 @@ function rowAt(rows: TrajectoryRow[], range: number): TrajectoryRow {
 }
 
 describe("solveTrajectory — imperial reference scenario", () => {
-    const rows = solveTrajectory(referenceInputs, "imperial", referenceWindow);
+    let rows: TrajectoryRow[];
+    beforeAll(async () => {
+        rows = await solveTrajectory(referenceInputs, "imperial", referenceWindow);
+    });
 
     it("produces 21 rows from 0 to 1000 yd", () => {
         expect(rows.length).toBe(21);
@@ -89,8 +92,8 @@ describe("solveTrajectory — imperial reference scenario", () => {
 });
 
 describe("solveTrajectory — minRange filter", () => {
-    it("drops rows below minRange", () => {
-        const rows = solveTrajectory(referenceInputs, "imperial", {
+    it("drops rows below minRange", async () => {
+        const rows = await solveTrajectory(referenceInputs, "imperial", {
             maxRange: 1000,
             rangeStep: 100,
             minRange: 300,
@@ -99,13 +102,13 @@ describe("solveTrajectory — minRange filter", () => {
         expect(rows[rows.length - 1].range).toBeCloseTo(1000, 0);
     });
 
-    it("is a no-op when minRange is 0 or undefined", () => {
-        const withZero = solveTrajectory(referenceInputs, "imperial", {
+    it("is a no-op when minRange is 0 or undefined", async () => {
+        const withZero = await solveTrajectory(referenceInputs, "imperial", {
             maxRange: 1000,
             rangeStep: 100,
             minRange: 0,
         });
-        const without = solveTrajectory(referenceInputs, "imperial", {
+        const without = await solveTrajectory(referenceInputs, "imperial", {
             maxRange: 1000,
             rangeStep: 100,
         });
@@ -114,8 +117,8 @@ describe("solveTrajectory — minRange filter", () => {
 });
 
 describe("solveTrajectory — zeroOffset", () => {
-    it("shifts impact at the zero range by zeroOffset (imperial)", () => {
-        const rows = solveTrajectory(
+    it("shifts impact at the zero range by zeroOffset (imperial)", async () => {
+        const rows = await solveTrajectory(
             { ...referenceInputs, zeroOffset: 2 },
             "imperial",
             referenceWindow
@@ -124,8 +127,8 @@ describe("solveTrajectory — zeroOffset", () => {
         expect(r.elevation).toBeCloseTo(2, 0);
     });
 
-    it("accepts negative zeroOffset (impact below LOS at zero range)", () => {
-        const rows = solveTrajectory(
+    it("accepts negative zeroOffset (impact below LOS at zero range)", async () => {
+        const rows = await solveTrajectory(
             { ...referenceInputs, zeroOffset: -2 },
             "imperial",
             referenceWindow
@@ -134,9 +137,9 @@ describe("solveTrajectory — zeroOffset", () => {
         expect(r.elevation).toBeCloseTo(-2, 0);
     });
 
-    it("preserves drop at long range relative to default zero", () => {
-        const base = solveTrajectory(referenceInputs, "imperial", referenceWindow);
-        const offset = solveTrajectory(
+    it("preserves drop at long range relative to default zero", async () => {
+        const base = await solveTrajectory(referenceInputs, "imperial", referenceWindow);
+        const offset = await solveTrajectory(
             { ...referenceInputs, zeroOffset: 2 },
             "imperial",
             referenceWindow
@@ -147,9 +150,9 @@ describe("solveTrajectory — zeroOffset", () => {
         expect(dz).toBeLessThan(11);
     });
 
-    it("is a no-op when zeroOffset is 0", () => {
-        const a = solveTrajectory(referenceInputs, "imperial", referenceWindow);
-        const b = solveTrajectory(
+    it("is a no-op when zeroOffset is 0", async () => {
+        const a = await solveTrajectory(referenceInputs, "imperial", referenceWindow);
+        const b = await solveTrajectory(
             { ...referenceInputs, zeroOffset: 0 },
             "imperial",
             referenceWindow
@@ -161,7 +164,7 @@ describe("solveTrajectory — zeroOffset", () => {
 });
 
 describe("solveTrajectory — metric inputs", () => {
-    it("accepts metric inputs and returns metric outputs", () => {
+    it("accepts metric inputs and returns metric outputs", async () => {
         const metric: BallisticsInputs = {
             bc: 0.475,
             initialVelocity: 823,
@@ -172,7 +175,7 @@ describe("solveTrajectory — metric inputs", () => {
             bulletWeight: 10.9,
             zeroOffset: 0,
         };
-        const rows = solveTrajectory(metric, "metric", { maxRange: 914, rangeStep: 91 });
+        const rows = await solveTrajectory(metric, "metric", { maxRange: 914, rangeStep: 91 });
         expect(rows.length).toBeGreaterThan(5);
         const zero = rows.find((r) => Math.abs(r.range - 91) < 1);
         expect(zero).toBeDefined();

@@ -18,7 +18,7 @@
         "shooting"
     ],
     "devDependencies": {
-        "@types/node": "^26.6.7",
+        "@types/node": "^26.6.10",
         "@typescript-eslint/eslint-plugin": "8.73.0",
         "@typescript-eslint/parser": "8.73.0",
         "esbuild": "0.28.2",
